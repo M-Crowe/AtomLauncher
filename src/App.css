@@ -1,0 +1,51 @@
+@import "tailwindcss";
+
+@theme {
+  --color-diamond-40: rgba(74, 237, 217, 1);
+
+  --color-dirt-10: rgba(245, 235, 225, 1);
+  --color-dirt-100: rgba(47, 31, 23, 1);
+  --color-dirt-20: rgba(221, 186, 132, 1);
+  --color-dirt-40: rgba(177, 132, 82, 1);
+  --color-dirt-60: rgba(134, 96, 61, 1);
+  --color-dirt-80: rgba(87, 61, 38, 1);
+
+  --color-grass-10: rgba(237, 249, 231, 1);
+  --color-grass-100: rgba(27, 59, 17, 1);
+  --color-grass-20: rgba(168, 224, 99, 1);
+  --color-grass-40: rgba(126, 193, 56, 1);
+  --color-grass-60: rgba(74, 136, 43, 1);
+  --color-grass-80: rgba(46, 94, 28, 1);
+
+  --color-netherite-100: rgba(23, 24, 28, 1);
+  --color-netherite-80: rgba(40, 43, 48, 1);
+
+  --color-redstone-100: rgba(61, 9, 7, 1);
+  --color-redstone-20: rgba(255, 170, 0, 1);
+  --color-redstone-40: rgba(255, 85, 51, 1);
+  --color-redstone-60: rgba(221, 42, 27, 1);
+
+  --color-stone-10: rgba(244, 245, 247, 1);
+  --color-stone-100: rgba(18, 18, 20, 1);
+  --color-stone-40: rgba(159, 165, 173, 1);
+  --color-stone-60: rgba(101, 107, 115, 1);
+  --color-stone-80: rgba(51, 53, 58, 1);
+
+  --color-border-hard: var(--color-redstone-100);
+  --color-border-top-light: var(--color-dirt-20);
+
+  --color-primary-active: var(--color-grass-80);
+
+  --color-btn-primary-bg: var(--color-grass-60);
+  --color-btn-primary-hover: var(--color-grass-40);
+  --color-btn-primary-text: rgba(255, 255, 255, 1);
+  --color-btn-secondary-bg: var(--color-dirt-60);
+  --color-btn-secondary-hover: var(--color-dirt-40);
+
+  --color-surface-app-bg: var(--color-stone-10);
+  --color-surface-card: var(--color-dirt-10);
+  --color-surface-slot: var(--color-dirt-80);
+
+  --color-text-muted: var(--color-stone-60);
+  --color-text-primary: var(--color-stone-100);
+}
