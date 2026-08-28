@@ -1,6 +1,18 @@
 @import "tailwindcss";
 
+@font-face{
+  font-family: "FusionPixelFont";
+  src: url("./assets/fonts/fusion-pixel-10px-proportional-zh_hans.otf.woff2") format("woff2");
+  font-weight: 400;
+  font-style: normal;
+  font-display: swap;
+}
+
 @theme {
+  /* Font Family */
+  --font-fusion: "FusionPixelFont", sans-serif;
+
+  /* Color Palette */
   --color-diamond-40: rgba(74, 237, 217, 1);
 
   --color-dirt-10: rgba(245, 235, 225, 1);
@@ -39,6 +51,7 @@
   --color-btn-primary-bg: var(--color-grass-60);
   --color-btn-primary-hover: var(--color-grass-40);
   --color-btn-primary-text: rgba(255, 255, 255, 1);
+  --color-btn-primary-active: var(--color-grass-80);
   --color-btn-secondary-bg: var(--color-dirt-60);
   --color-btn-secondary-hover: var(--color-dirt-40);
 
