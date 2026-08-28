@@ -1,0 +1,51 @@
+name: Manual Build Windows EXE
+
+on:
+  workflow_dispatch: # 开启手动触发按钮
+
+jobs:
+  build-exe:
+    runs-on: windows-latest
+
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      # 1. 安装 Node.js 环境
+      - name: Setup Node.js
+        uses: actions/setup-node@v4
+        with:
+          node-version: lts/*
+
+      # 2. 安装 Rust 环境
+      - name: Setup Rust
+        uses: dtolnay/rust-toolchain@stable
+
+      # 3. Rust 编译缓存
+      - name: Rust cache
+        uses: swatinem/rust-cache@v2
+        with:
+          workspaces: './src-tauri -> target'
+
+      # 4. 安装前端依赖（如使用 pnpm/yarn，请替换对应命令）
+      - name: Install frontend dependencies
+        run: npm install
+
+      # 5. 执行 Tauri 打包
+      - name: Build Tauri App
+        uses: tauri-apps/tauri-action@v0
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        with:
+          # 不自动发布到 Release，仅执行构建
+          pushName: ''
+
+      # 6. 将生成的 .exe 挂载到 Action 页面供直接下载
+      - name: Upload EXE Artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: windows-exe
+          path: |
+            src-tauri/target/release/bundle/nsis/*.exe
+            src-tauri/target/release/bundle/portable/*.exe
+          if-no-files-found: error
