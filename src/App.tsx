@@ -1,5 +1,6 @@
 import "./App.css";
 import WindowControls from "./components/WindowControls";
+import BottomNav from "./components/BottomNav";
 
 function App() {
   return (
@@ -43,7 +44,9 @@ function App() {
 
 
         {/*底部栏navbar*/}
-        <div className="h-full w-full ring-inset ring-3 ring-border-hard"></div>
+        <div className="h-full w-full ring-inset ring-3 ring-border-hard">
+          <BottomNav />
+        </div>
 
         {/*底部栏右侧*/}
         <div ></div>
