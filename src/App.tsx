@@ -1,6 +1,7 @@
 import "./App.css";
 import WindowControls from "./components/WindowControls";
 import BottomNav from "./components/BottomNav";
+import { PluginSlot } from './components/PluginSlot';
 
 function App() {
   return (
@@ -23,7 +24,13 @@ function App() {
         </div>
         <div ></div>
         {/*主要内容*/}
-        <div className="h-full w-full border-10 border-grass-80 rounded"></div>
+        <div className="h-full w-full border-10 border-grass-80 rounded">
+          <PluginSlot 
+          pluginDir={"D:/tauri-apps/AtomLauncher/atom-launcher/src/my-demo"} 
+          entryJs="ui/index.js" 
+          />
+
+        </div>
         {/*右侧栏*/}
         <div className="
           grid h-full w-full

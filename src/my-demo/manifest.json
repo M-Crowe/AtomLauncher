@@ -1,0 +1,6 @@
+{
+  "id": "my-demo-plugin",
+  "name": "测试插件",
+  "entry_js": "ui/index.js",
+  "entry_wasm": "main.wasm"
+}
