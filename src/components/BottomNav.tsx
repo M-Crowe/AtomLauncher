@@ -1,34 +1,51 @@
-import {useState} from 'react';
+import { useState } from 'react';
 
 import HomeIcon from '../assets/home.svg?react';
 import SettingsIcon from '../assets/settings.svg?react';
 import ToolsIcon from '../assets/tools.svg?react';
 
-type NavValue = "home" | "settings" | "tools";
+export type NavValue = "home" | "settings" | "tools";
+
+export interface BottomNavProps {
+    activeTab?: NavValue;
+    value?: NavValue;
+    defaultValue?: NavValue;
+    onChange?: (value: NavValue) => void;
+    onSelect?: (value: NavValue) => void;
+}
 
 const items: { label: string; value: NavValue; icon: typeof HomeIcon }[] = [
-    { label: '首页', value: 'home', icon: HomeIcon},
-    { label: '设置', value: 'settings', icon: SettingsIcon},
-    { label: '工具', value: 'tools', icon: ToolsIcon}
+    { label: '首页', value: 'home', icon: HomeIcon },
+    { label: '设置', value: 'settings', icon: SettingsIcon },
+    { label: '工具', value: 'tools', icon: ToolsIcon }
 ];
 
-export default function BottomNav() {
-    const [active, setActive] = useState<NavValue>('home');
-    const [pending, setPending] = useState<NavValue>('home');
+const indexMap: Record<NavValue, number> = {
+    home: 0,
+    settings: 1,
+    tools: 2
+};
 
-    const handleNavClick = (value: NavValue) => {
-        setPending(value);
-        setActive(value);
+export default function BottomNav({ activeTab, value, defaultValue = 'home', onChange, onSelect }: BottomNavProps) {
+    const [internalTab, setInternalTab] = useState<NavValue>(defaultValue);
+    const isControlled = activeTab !== undefined || value !== undefined;
+    const rawCurrent = isControlled ? (activeTab ?? value ?? 'home') : internalTab;
+    const current: NavValue = (rawCurrent in indexMap) ? rawCurrent : 'home';
+
+    const handleNavClick = (val: NavValue) => {
+        if (!isControlled) {
+            setInternalTab(val);
+        }
+        onChange?.(val);
+        onSelect?.(val);
     };
 
-    const indexMap: Record<NavValue, number> = {
-        home: 0,
-        settings: 1,
-        tools: 2
-    }
-
     return (
-        <nav className="relative flex w-full h-full items-center justify-between px-16">
+        <nav
+            role="tablist"
+            aria-label="启动器主要导航"
+            className="relative flex w-full h-full items-center justify-between px-16"
+        >
             <div
                 className="
                 absolute flex h-15 left-16 right-16 z-0
@@ -40,7 +57,7 @@ export default function BottomNav() {
                     className="
                     h-15 w-1/3 flex-none 
                     transition-transform duration-300 ease-out"
-                    style={{ transform: `translateX(${indexMap[pending] * 100}%)` }}
+                    style={{ transform: `translateX(${indexMap[current] * 100}%)` }}
                 >
                     <div className="
                     mx-auto h-15 w-19 
@@ -50,27 +67,31 @@ export default function BottomNav() {
                 </div>
             </div>
             {items.map((item) => {
-                const isActive = active === item.value;
+                const isActive = current === item.value;
                 const Icon = item.icon;
 
                 return (
                     <button
+                        role="tab"
+                        aria-selected={isActive}
+                        aria-label={item.label}
+                        tabIndex={0}
                         className={`
                             relative flex flex-col flex-1 items-center justify-center gap-0 z-10
                             transition-colors duration-300 ease-in-out
                             cursor-pointer
+                            focus-visible:outline-none focus-visible:ring-2 focus-visible:ring-inset focus-visible:ring-border-hard
                             ${isActive
-                                ?"text-btn-primary-text"
-                                :"text-text-muted"
+                                ? "text-btn-primary-text"
+                                : "text-text-muted"
                             }
                             `}
-                        key = {item.value}
+                        key={item.value}
                         type="button"
                         onClick={() => handleNavClick(item.value)}
                     >
                         <Icon className="h-8 w-8 fill-current" />
                         <span className="font-fusion text-[11px] items-center">{item.label}</span>
-
                     </button>
                 );
             })}
