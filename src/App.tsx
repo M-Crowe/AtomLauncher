@@ -16,7 +16,8 @@ import {
   listenMinecraftStarted,
   scanMinecraftVersions,
 } from "./utils/launcherService";
-import { getEffectiveJavaPath, loadLauncherSettings } from "./utils/settingsStorage";
+import { getEffectiveJavaPath, loadLauncherSettings, onSettingsChange } from "./utils/settingsStorage";
+import type { LauncherSettings } from "./types/settings";
 
 function App() {
   const [currentTab, setCurrentTab] = useState<NavValue>("home");
@@ -27,9 +28,9 @@ function App() {
   const [versions, setVersions] = useState<MinecraftVersionInfo[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string>("1.20.4");
 
-  // Load settings and scan versions on initial load or tab switch
-  useEffect(() => {
-    const s = loadLauncherSettings();
+  // Load settings and scan versions on initial load, tab switch, or settings change
+  const refreshVersions = (customSettings?: LauncherSettings) => {
+    const s = customSettings || loadLauncherSettings();
     if (s.selectedVersionId) {
       setSelectedVersionId(s.selectedVersionId);
     }
@@ -43,7 +44,18 @@ function App() {
         setSelectedVersionId(scanned[0].id);
       }
     });
+  };
+
+  useEffect(() => {
+    refreshVersions();
   }, [currentTab]);
+
+  useEffect(() => {
+    const unsubscribe = onSettingsChange((newSettings) => {
+      refreshVersions(newSettings);
+    });
+    return unsubscribe;
+  }, []);
 
   // Setup Tauri event listeners for real-time streaming
   useEffect(() => {
@@ -313,47 +325,11 @@ function App() {
           </div>
         </div>
 
-        {/* 底部受控导航栏与左下角实时日志状态指示入口 (图一位置) */}
+        {/* 底部受控导航栏 */}
         <div className="h-full w-full ring-inset ring-3 ring-border-hard flex items-center justify-between relative">
           <div className="flex-1 h-full">
             <BottomNav activeTab={currentTab} onChange={setCurrentTab} />
           </div>
-
-          {/* 实时日志状态指示入口浮动按钮 */}
-          {(runningPid || logs.length > 0 || launchState === "running" || launchState === "launching") && (
-            <button
-              type="button"
-              data-testid="bottom-log-status-button"
-              onClick={() => setIsLogViewOpen(!isLogViewOpen)}
-              className="
-                absolute right-4 top-1/2 -translate-y-1/2
-                flex items-center gap-1.5 px-3 py-1.5
-                bg-stone-90/90 hover:bg-stone-80 active:bg-stone-95
-                text-stone-100 font-fusion text-xs font-bold
-                border-2 border-grass-80 rounded
-                shadow-[2px_2px_0_rgba(0,0,0,0.5)]
-                cursor-pointer select-none transition-all z-10
-                active:translate-y-0.5
-              "
-            >
-              <span
-                className={`w-2 h-2 rounded-full ${
-                  launchState === "running"
-                    ? "bg-green-400 animate-ping"
-                    : launchState === "launching"
-                    ? "bg-amber-400 animate-pulse"
-                    : "bg-stone-40"
-                }`}
-              />
-              <span>
-                {runningPid
-                  ? `实时日志 (PID: ${runningPid})`
-                  : isLogViewOpen
-                  ? "返回启动器"
-                  : "查看实时日志"}
-              </span>
-            </button>
-          )}
         </div>
 
         {/* 底部栏右侧：双分块启动按钮组 (图三位置，网格第二列第三行 277px 区域) */}
@@ -367,6 +343,48 @@ function App() {
           />
         </div>
       </div>
+
+      {/* 扁平化现代设计：实时日志悬浮胶囊按钮 (位于窗口左下方，视觉风格区别于启动器复古像素界面) */}
+      {(runningPid || logs.length > 0 || launchState === "running" || launchState === "launching") && (
+        <button
+          type="button"
+          data-testid="bottom-log-status-button"
+          onClick={() => setIsLogViewOpen(!isLogViewOpen)}
+          className="
+            fixed left-12 bottom-3 z-50
+            flex items-center gap-2 px-3.5 py-1.5
+            rounded-full backdrop-blur-md bg-neutral-900/90 hover:bg-neutral-800 active:bg-black
+            text-white font-sans text-xs font-medium tracking-wide
+            border border-white/15 shadow-[0_4px_16px_rgba(0,0,0,0.35)]
+            cursor-pointer select-none transition-all duration-200
+            active:scale-95
+          "
+        >
+          <span className="relative flex h-2 w-2">
+            {launchState === "running" && (
+              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+            )}
+            <span
+              className={`relative inline-flex rounded-full h-2 w-2 ${
+                launchState === "running"
+                  ? "bg-emerald-400 shadow-[0_0_8px_#34d399]"
+                  : launchState === "launching"
+                  ? "bg-amber-400 animate-pulse"
+                  : launchState === "crashed"
+                  ? "bg-rose-500 shadow-[0_0_8px_#f43f5e]"
+                  : "bg-slate-400"
+              }`}
+            />
+          </span>
+          <span>
+            {isLogViewOpen
+              ? "返回启动器"
+              : runningPid
+              ? `实时日志 (PID: ${runningPid})`
+              : "查看实时日志"}
+          </span>
+        </button>
+      )}
 
       <WindowControls />
     </main>

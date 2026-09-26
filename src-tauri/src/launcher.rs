@@ -110,109 +110,139 @@ fn detect_loader(json_content: &str, version_id: &str) -> String {
 
 fn scan_single_minecraft_dir(root_path: &Path, source_label: &str) -> Vec<MinecraftVersionInfo> {
     let mut versions = Vec::new();
-    let versions_dir = root_path.join("versions");
-    if !versions_dir.exists() || !versions_dir.is_dir() {
-        return versions;
+    let mut candidate_dirs: Vec<(PathBuf, PathBuf)> = Vec::new();
+
+    // 1. root/versions
+    let v1 = root_path.join("versions");
+    if v1.exists() && v1.is_dir() {
+        candidate_dirs.push((v1, root_path.to_path_buf()));
     }
 
-    let entries = match fs::read_dir(&versions_dir) {
-        Ok(e) => e,
-        Err(_) => return versions,
-    };
+    // 2. root/.minecraft/versions
+    let v2 = root_path.join(".minecraft").join("versions");
+    if v2.exists() && v2.is_dir() {
+        candidate_dirs.push((v2, root_path.join(".minecraft")));
+    }
 
-    for entry in entries.flatten() {
-        let path = entry.path();
-        if !path.is_dir() {
-            continue;
-        }
+    // 3. If root itself is named "versions"
+    if root_path.file_name().map_or(false, |n| n.to_string_lossy().eq_ignore_ascii_case("versions")) && root_path.is_dir() {
+        let parent = root_path.parent().unwrap_or(root_path).to_path_buf();
+        candidate_dirs.push((root_path.to_path_buf(), parent));
+    }
 
-        let folder_name = match path.file_name() {
-            Some(n) => n.to_string_lossy().to_string(),
-            None => continue,
+    // 4. If candidate dirs empty, check if root itself has version subdirectories with json
+    if candidate_dirs.is_empty() && root_path.is_dir() {
+        candidate_dirs.push((root_path.to_path_buf(), root_path.to_path_buf()));
+    }
+
+    let mut visited_jsons = std::collections::HashSet::new();
+
+    for (versions_dir, effective_game_dir) in candidate_dirs {
+        let entries = match fs::read_dir(&versions_dir) {
+            Ok(e) => e,
+            Err(_) => continue,
         };
 
-        let json_file = {
-            let direct = path.join(format!("{folder_name}.json"));
-            if direct.exists() {
-                Some(direct)
-            } else {
-                let mut found = None;
-                if let Ok(dir_entries) = fs::read_dir(&path) {
-                    for e in dir_entries.flatten() {
-                        let p = e.path();
-                        if p.is_file() && p.extension().map_or(false, |ext| ext == "json") {
-                            found = Some(p);
-                            break;
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if !path.is_dir() {
+                continue;
+            }
+
+            let folder_name = match path.file_name() {
+                Some(n) => n.to_string_lossy().to_string(),
+                None => continue,
+            };
+
+            let json_file = {
+                let direct = path.join(format!("{folder_name}.json"));
+                if direct.exists() {
+                    Some(direct)
+                } else {
+                    let mut found = None;
+                    if let Ok(dir_entries) = fs::read_dir(&path) {
+                        for e in dir_entries.flatten() {
+                            let p = e.path();
+                            if p.is_file() && p.extension().map_or(false, |ext| ext == "json") {
+                                found = Some(p);
+                                break;
+                            }
                         }
                     }
+                    found
                 }
-                found
+            };
+
+            let json_file = match json_file {
+                Some(j) => j,
+                None => continue,
+            };
+
+            let json_canonical = json_file.to_string_lossy().to_lowercase();
+            if visited_jsons.contains(&json_canonical) {
+                continue;
             }
-        };
+            visited_jsons.insert(json_canonical);
 
-        let json_file = match json_file {
-            Some(j) => j,
-            None => continue,
-        };
-
-        let jar_file = {
-            let direct = path.join(format!("{folder_name}.jar"));
-            if direct.exists() {
-                Some(direct)
-            } else {
-                let mut found = None;
-                if let Ok(dir_entries) = fs::read_dir(&path) {
-                    for e in dir_entries.flatten() {
-                        let p = e.path();
-                        if p.is_file() && p.extension().map_or(false, |ext| ext == "jar") {
-                            found = Some(p);
-                            break;
+            let jar_file = {
+                let direct = path.join(format!("{folder_name}.jar"));
+                if direct.exists() {
+                    Some(direct)
+                } else {
+                    let mut found = None;
+                    if let Ok(dir_entries) = fs::read_dir(&path) {
+                        for e in dir_entries.flatten() {
+                            let p = e.path();
+                            if p.is_file() && p.extension().map_or(false, |ext| ext == "jar") {
+                                found = Some(p);
+                                break;
+                            }
                         }
                     }
+                    found
                 }
-                found
-            }
-        };
+            };
 
-        let jar_path_str = jar_file.map(|j| j.to_string_lossy().to_string());
+            let jar_path_str = jar_file.map(|j| j.to_string_lossy().to_string());
 
-        let last_modified = if let Ok(meta) = fs::metadata(&json_file) {
-            if let Ok(modified) = meta.modified() {
-                let duration = modified.duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
-                let secs = duration.as_secs();
-                let days = secs / 86400;
-                let hours = (secs % 86400) / 3600;
-                let mins = (secs % 3600) / 60;
-                Some(format!("{days}d {hours:02}:{mins:02}"))
+            let last_modified = if let Ok(meta) = fs::metadata(&json_file) {
+                if let Ok(modified) = meta.modified() {
+                    let duration = modified.duration_since(std::time::UNIX_EPOCH).unwrap_or_default();
+                    let secs = duration.as_secs();
+                    let days = secs / 86400;
+                    let hours = (secs % 86400) / 3600;
+                    let mins = (secs % 3600) / 60;
+                    Some(format!("{days}d {hours:02}:{mins:02}"))
+                } else {
+                    None
+                }
             } else {
                 None
-            }
-        } else {
-            None
-        };
+            };
 
-        if let Ok(content) = fs::read_to_string(&json_file) {
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) {
-                let id = v.get("id").and_then(|x| x.as_str()).unwrap_or(&folder_name).to_string();
-                let type_name = v.get("type").and_then(|x| x.as_str()).unwrap_or("release").to_string();
-                let main_class = v.get("mainClass").and_then(|x| x.as_str()).map(|s| s.to_string());
-                let inherits_from = v.get("inheritsFrom").and_then(|x| x.as_str()).map(|s| s.to_string());
-                let loader_type = detect_loader(&content, &id);
+            if let Ok(content) = fs::read_to_string(&json_file) {
+                if let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) {
+                    let id = v.get("id").and_then(|x| x.as_str()).unwrap_or(&folder_name).to_string();
+                    let type_name = v.get("type").and_then(|x| x.as_str()).unwrap_or("release").to_string();
+                    let main_class = v.get("mainClass").and_then(|x| x.as_str()).map(|s| s.to_string());
+                    let inherits_from = v.get("inheritsFrom").and_then(|x| x.as_str()).map(|s| s.to_string());
+                    let loader_type = detect_loader(&content, &id);
 
-                versions.push(MinecraftVersionInfo {
-                    id: id.clone(),
-                    name: format!("{id} ({type_name})"),
-                    type_name,
-                    main_class,
-                    inherits_from,
-                    last_modified,
-                    source_path: root_path.to_string_lossy().to_string(),
-                    source_label: source_label.to_string(),
-                    json_path: json_file.to_string_lossy().to_string(),
-                    jar_path: jar_path_str,
-                    loader_type,
-                    is_valid: true,
-                });
+                    versions.push(MinecraftVersionInfo {
+                        id: id.clone(),
+                        name: format!("{id} ({type_name})"),
+                        type_name,
+                        main_class,
+                        inherits_from,
+                        last_modified,
+                        source_path: effective_game_dir.to_string_lossy().to_string(),
+                        source_label: source_label.to_string(),
+                        json_path: json_file.to_string_lossy().to_string(),
+                        jar_path: jar_path_str,
+                        loader_type,
+                        is_valid: true,
+                    });
+                }
             }
         }
     }

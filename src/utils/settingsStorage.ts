@@ -111,6 +111,16 @@ export function loadLauncherSettings(): LauncherSettings {
   }
 }
 
+type SettingsChangeListener = (settings: LauncherSettings) => void;
+const settingsListeners = new Set<SettingsChangeListener>();
+
+export function onSettingsChange(listener: SettingsChangeListener): () => void {
+  settingsListeners.add(listener);
+  return () => {
+    settingsListeners.delete(listener);
+  };
+}
+
 export function saveLauncherSettings(settings: LauncherSettings): void {
   if (typeof window === 'undefined' || !window.localStorage) return;
   try {
@@ -145,6 +155,15 @@ export function saveLauncherSettings(settings: LauncherSettings): void {
       autoClose: afterLaunch === 'minimize',
     };
     window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(toSave));
+
+    // 通知所有已注册的设置变更监听器
+    settingsListeners.forEach((listener) => {
+      try {
+        listener(toSave);
+      } catch (listenerErr) {
+        console.error('Error in settings change listener:', listenerErr);
+      }
+    });
   } catch (err) {
     console.error('Failed to save launcher settings:', err);
   }
