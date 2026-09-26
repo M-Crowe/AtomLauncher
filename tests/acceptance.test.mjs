@@ -331,7 +331,8 @@ test('R2. Zero DOM measureText calls in hot RAF render loop', () => {
 });
 
 test('R2. Head tilt and eye gaze offsets reset on startled and panic states', () => {
-  const creeperContent = readFileSync(resolve('src/components/CreeperCanvas.tsx'), 'utf-8');
+  const rawContent = readFileSync(resolve('src/components/CreeperCanvas.tsx'), 'utf-8');
+  const creeperContent = rawContent.replace(/\r\n/g, '\n');
 
   // triggerStartled 函数应重置 headTilt 与 lookOffset
   const triggerStartledStart = creeperContent.indexOf('const triggerStartled = () => {');
