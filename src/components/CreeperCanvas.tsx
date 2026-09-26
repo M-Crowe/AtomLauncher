@@ -1,5 +1,6 @@
 import React, { useEffect, useRef } from 'react';
 import { prepareWithSegments, layoutWithLines, clearCache } from '@chenglou/pretext';
+import { loadLauncherSettings } from '../utils/settingsStorage';
 
 // 像素单元格颜色调色板 (Minecraft 经典苦力怕迷彩)
 const CREEPER_COLORS = {
@@ -349,6 +350,8 @@ export default function CreeperCanvas() {
 
       // 归一化时间步长 (基准 60fps)，防止高刷新率 (144Hz/240Hz) 下苦力怕移速过快与惊吓计时失真
       const timeScale = Math.min(Math.max(dt * 60, 0.2), 3);
+      const launcherSettings = loadLauncherSettings();
+      const effectsEnabled = launcherSettings.creeperEffects !== false;
 
       // 受惊状态计时
       if (s.startledTimer > 0) {
@@ -366,7 +369,7 @@ export default function CreeperCanvas() {
           s.panicTimer = Math.max(0, s.panicTimer - timeScale);
           // 惊吓逃窜：2.4倍速逃跑
           s.speed = 2.4;
-          s.isWalking = true;
+          s.isWalking = effectsEnabled;
           s.isWatching = false;
           s.headTilt = 0;
           s.lookOffsetX = 0;
@@ -375,7 +378,7 @@ export default function CreeperCanvas() {
           s.isPanicked = false;
           s.speed = 1.1;
           // 当鼠标靠近 (< 150px) 且未惊吓时，停步并注视光标
-          if (distToMouse < 150 && s.mouseX >= 0) {
+          if (effectsEnabled && distToMouse < 150 && s.mouseX >= 0) {
             s.isWalking = false;
             s.isWatching = true;
             // 苦力怕掉头面朝光标
@@ -387,7 +390,7 @@ export default function CreeperCanvas() {
             s.lookOffsetX = Math.abs(s.mouseX - s.creeperX) > 10 ? 1 : 0;
             s.lookOffsetY = Math.abs(dy) > 15 ? (dy > 0 ? 1 : -1) : 0;
           } else {
-            s.isWalking = true;
+            s.isWalking = effectsEnabled;
             s.isWatching = false;
             s.headTilt = 0;
             s.lookOffsetX = 0;
@@ -397,7 +400,7 @@ export default function CreeperCanvas() {
       }
 
       // 漫步巡逻与碰撞掉头逻辑 (窄容器极限下保证 leftBound < rightBound，防止震荡死循环)
-      if (s.isWalking) {
+      if (s.isWalking && effectsEnabled) {
         s.creeperX += s.dir * s.speed * timeScale;
         s.walkPhase += dt * (s.speed * 4.5);
 
@@ -415,7 +418,7 @@ export default function CreeperCanvas() {
 
       // 云朵平移更新 (时间步长归一化)
       s.clouds.forEach((cloud) => {
-        cloud.x += cloud.speed * timeScale;
+        cloud.x += (effectsEnabled ? cloud.speed : 0.05) * timeScale;
         if (cloud.x > width + 40) {
           cloud.x = -cloud.width - 20;
         }
