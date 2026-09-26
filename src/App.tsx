@@ -16,8 +16,13 @@ import {
   listenMinecraftStarted,
   scanMinecraftVersions,
 } from "./utils/launcherService";
-import { getEffectiveJavaPath, loadLauncherSettings, onSettingsChange } from "./utils/settingsStorage";
-import type { LauncherSettings } from "./types/settings";
+import {
+  getEffectiveJavaPath,
+  loadLauncherSettings,
+  onSettingsChange,
+  scanSystemJavaRuntimes,
+} from "./utils/settingsStorage";
+import type { LauncherSettings, JavaRuntime } from "./types/settings";
 
 function App() {
   const [currentTab, setCurrentTab] = useState<NavValue>("home");
@@ -27,6 +32,16 @@ function App() {
   const [isLogViewOpen, setIsLogViewOpen] = useState(false);
   const [versions, setVersions] = useState<MinecraftVersionInfo[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string>("1.20.4");
+  const [javaRuntimes, setJavaRuntimes] = useState<JavaRuntime[]>([]);
+
+  // Scan Java environments on mount
+  useEffect(() => {
+    scanSystemJavaRuntimes().then((runtimes) => {
+      if (Array.isArray(runtimes) && runtimes.length > 0) {
+        setJavaRuntimes(runtimes);
+      }
+    });
+  }, []);
 
   // Load settings and scan versions on initial load, tab switch, or settings change
   const refreshVersions = (customSettings?: LauncherSettings) => {
@@ -57,43 +72,64 @@ function App() {
     return unsubscribe;
   }, []);
 
-  // Setup Tauri event listeners for real-time streaming
+  // Setup Tauri event listeners for real-time streaming with strict lifecycle cleanup
   useEffect(() => {
+    let isCancelled = false;
     let unlistenLog: (() => void) | undefined;
     let unlistenExit: (() => void) | undefined;
     let unlistenStarted: (() => void) | undefined;
 
     listenMinecraftLog((payload) => {
-      setLogs((prev) => [
-        ...prev.slice(-1999),
-        {
-          id: `${Date.now()}-${Math.random()}`,
-          pid: payload.pid,
-          line: payload.line,
-          level: payload.level,
-          timestamp: payload.timestamp,
-          isError: payload.isError,
-        },
-      ]);
+      setLogs((prev) => {
+        // Prevent duplicate adjacent logs
+        const last = prev[prev.length - 1];
+        if (last && last.line === payload.line && last.timestamp === payload.timestamp && last.pid === payload.pid) {
+          return prev;
+        }
+        return [
+          ...prev.slice(-1999),
+          {
+            id: `${Date.now()}-${Math.random()}`,
+            pid: payload.pid,
+            line: payload.line,
+            level: payload.level,
+            timestamp: payload.timestamp,
+            isError: payload.isError,
+          },
+        ];
+      });
     }).then((unlisten) => {
-      unlistenLog = unlisten;
+      if (isCancelled) {
+        unlisten();
+      } else {
+        unlistenLog = unlisten;
+      }
     });
 
     listenMinecraftExit((payload) => {
       setRunningPid(null);
       setLaunchState(payload.success ? "exited" : "crashed");
     }).then((unlisten) => {
-      unlistenExit = unlisten;
+      if (isCancelled) {
+        unlisten();
+      } else {
+        unlistenExit = unlisten;
+      }
     });
 
     listenMinecraftStarted((payload) => {
       setRunningPid(payload.pid);
       setLaunchState("running");
     }).then((unlisten) => {
-      unlistenStarted = unlisten;
+      if (isCancelled) {
+        unlisten();
+      } else {
+        unlistenStarted = unlisten;
+      }
     });
 
     return () => {
+      isCancelled = true;
       unlistenLog?.();
       unlistenExit?.();
       unlistenStarted?.();
@@ -103,7 +139,7 @@ function App() {
   const handleLaunch = async () => {
     setLaunchState("checking");
     const s = loadLauncherSettings();
-    const javaPath = getEffectiveJavaPath(s);
+    const javaPath = getEffectiveJavaPath(s, javaRuntimes);
     const selectedVersion = versions.find((v) => v.id === selectedVersionId);
     const targetGameDir = selectedVersion?.sourcePath || s.gameDir;
 

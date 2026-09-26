@@ -329,11 +329,30 @@ pub fn scan_minecraft_versions(options: ScanOptions) -> Result<Vec<MinecraftVers
 
 fn parse_log_level(line: &str) -> &'static str {
     let upper = line.to_uppercase();
-    if upper.contains("/ERROR") || upper.contains("ERROR]") || upper.contains("[FATAL") || upper.contains("EXCEPTION") || upper.contains("CRITICAL") {
+    if upper.contains("/ERROR")
+        || upper.contains("ERROR]")
+        || upper.contains("[ERROR")
+        || upper.contains("ERROR:")
+        || upper.contains("错误:")
+        || upper.contains("错误：")
+        || upper.contains("[FATAL")
+        || upper.contains("EXCEPTION")
+        || upper.contains("LINKAGEERROR")
+        || upper.contains("UNSUPPORTEDCLASSVERSIONERROR")
+        || upper.contains("CRITICAL")
+        || upper.contains("CAUSED BY:")
+    {
         "ERROR"
-    } else if upper.contains("/WARN") || upper.contains("WARN]") || upper.contains("[WARNING") {
+    } else if upper.contains("/WARN")
+        || upper.contains("WARN]")
+        || upper.contains("[WARN")
+        || upper.contains("WARN:")
+        || upper.contains("[WARNING")
+        || upper.contains("警告:")
+        || upper.contains("警告：")
+    {
         "WARN"
-    } else if upper.contains("/DEBUG") || upper.contains("DEBUG]") || upper.contains("[TRACE") {
+    } else if upper.contains("/DEBUG") || upper.contains("DEBUG]") || upper.contains("[DEBUG") || upper.contains("[TRACE") {
         "DEBUG"
     } else {
         "INFO"
@@ -563,12 +582,13 @@ pub fn launch_minecraft(
                 match line_res {
                     Ok(line) => {
                         let level = parse_log_level(&line);
+                        let final_level = if level == "INFO" { "ERROR" } else { level };
                         let _ = app_clone.emit(
                             "minecraft-log",
                             LogPayload {
                                 pid,
                                 line,
-                                level: level.to_string(),
+                                level: final_level.to_string(),
                                 timestamp: get_current_time_str(),
                                 is_error: true,
                             },
