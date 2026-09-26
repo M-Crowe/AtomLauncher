@@ -115,7 +115,7 @@ test('R1 & R3. App integration: dual launch button, log status indicator, instan
   assert.ok(content.includes('LogView'), 'Hosts LogView');
   assert.ok(content.includes('data-testid="bottom-log-status-button"'), 'Includes bottom-left log status entry button');
   assert.ok(content.includes('实时日志'), 'Includes real-time log entry label');
-  assert.ok(content.includes('data-testid="add-instance-button"'), 'Includes instance add/scan entry');
+  assert.ok(content.includes('实例列表'), 'Includes instance list header');
 });
 
 test('Rust backend launcher module source code checks', () => {

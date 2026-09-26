@@ -71,28 +71,28 @@ export const LogView: React.FC<LogViewProps> = ({
   const getLevelBadgeClass = (level: string) => {
     switch (level) {
       case 'ERROR':
-        return 'text-red-400 bg-red-950/60 border-red-800';
+        return 'text-rose-400 bg-rose-950/80 border border-rose-700/80';
       case 'WARN':
-        return 'text-amber-400 bg-amber-950/60 border-amber-800';
+        return 'text-amber-400 bg-amber-950/80 border border-amber-700/80';
       case 'DEBUG':
-        return 'text-slate-400 bg-slate-900/60 border-slate-700';
+        return 'text-purple-400 bg-purple-950/80 border border-purple-700/80';
       case 'INFO':
       default:
-        return 'text-sky-400 bg-sky-950/60 border-sky-800';
+        return 'text-sky-400 bg-sky-950/80 border border-sky-700/80';
     }
   };
 
   const getLineTextClass = (level: string) => {
     switch (level) {
       case 'ERROR':
-        return 'text-red-300 font-semibold';
+        return 'text-rose-300 font-semibold';
       case 'WARN':
-        return 'text-amber-300';
+        return 'text-amber-200';
       case 'DEBUG':
-        return 'text-stone-400';
+        return 'text-zinc-400';
       case 'INFO':
       default:
-        return 'text-stone-200';
+        return 'text-zinc-200';
     }
   };
 
@@ -101,17 +101,17 @@ export const LogView: React.FC<LogViewProps> = ({
       data-testid="full-log-view"
       className="
         flex flex-col h-full w-full
-        bg-stone-90 text-stone-100 font-fusion
+        bg-[#0d1117] text-zinc-100 font-sans
         overflow-hidden select-text
       "
     >
-      {/* 顶部控制与状态栏 */}
+      {/* 顶部现代化控制与状态栏 */}
       <div
         className="
           flex flex-wrap items-center justify-between
-          px-3 py-2
-          bg-surface-card border-b-2 border-surface-slot
-          gap-2 shrink-0
+          px-4 py-2.5
+          bg-[#161b22] border-b border-[#30363d]
+          gap-3 shrink-0
         "
       >
         {/* 左侧：返回按钮与实例状态 */}
@@ -121,35 +121,48 @@ export const LogView: React.FC<LogViewProps> = ({
             data-testid="log-back-button"
             onClick={onBack}
             className="
-              flex items-center gap-1.5 px-3 py-1.5
-              bg-stone-80 hover:bg-stone-70 active:bg-stone-90
-              text-stone-100 text-xs font-bold
-              border border-stone-60 rounded
-              cursor-pointer select-none transition-colors
+              flex items-center gap-2 px-3.5 py-1.5
+              rounded-md bg-[#21262d] hover:bg-[#30363d] active:bg-[#161b22]
+              text-white font-sans text-xs font-semibold
+              border border-[#30363d] shadow-sm
+              cursor-pointer select-none transition-all duration-150
             "
           >
-            <span>&larr;</span>
+            <span className="text-sm font-bold">&larr;</span>
             <span>返回启动器</span>
           </button>
 
-          <div className="flex items-center gap-2">
-            <span className="text-xs font-bold text-btn-primary-active">
+          <div className="flex items-center gap-2 font-sans">
+            <span className="text-xs font-bold text-emerald-400 bg-emerald-950/70 px-2.5 py-1 rounded border border-emerald-800/70">
               {selectedVersion}
             </span>
             {pid && (
-              <span className="text-[11px] px-1.5 py-0.5 bg-stone-80 text-stone-30 border border-stone-60 rounded">
+              <span className="text-[11px] px-2 py-0.5 bg-[#21262d] text-zinc-300 border border-[#30363d] rounded font-mono">
                 PID: {pid}
               </span>
             )}
             <span
-              className={`text-[10px] px-2 py-0.5 rounded font-bold ${
+              className={`text-[11px] px-2.5 py-0.5 rounded-full font-medium flex items-center gap-1.5 ${
                 launchState === 'running'
-                  ? 'bg-grass-80 text-white animate-pulse'
+                  ? 'bg-emerald-500/15 text-emerald-300 border border-emerald-500/30'
                   : launchState === 'crashed'
-                  ? 'bg-red-800 text-white'
-                  : 'bg-stone-70 text-stone-30'
+                  ? 'bg-rose-500/15 text-rose-300 border border-rose-500/30'
+                  : launchState === 'launching'
+                  ? 'bg-amber-500/15 text-amber-300 border border-amber-500/30'
+                  : 'bg-zinc-800 text-zinc-400 border border-zinc-700'
               }`}
             >
+              <span
+                className={`w-1.5 h-1.5 rounded-full ${
+                  launchState === 'running'
+                    ? 'bg-emerald-400 animate-ping'
+                    : launchState === 'launching'
+                    ? 'bg-amber-400 animate-pulse'
+                    : launchState === 'crashed'
+                    ? 'bg-rose-500'
+                    : 'bg-zinc-400'
+                }`}
+              />
               {launchState === 'running'
                 ? '运行中'
                 : launchState === 'crashed'
@@ -162,7 +175,7 @@ export const LogView: React.FC<LogViewProps> = ({
         </div>
 
         {/* 右侧：过滤与操作按钮 */}
-        <div className="flex items-center gap-2">
+        <div className="flex items-center gap-2 font-sans">
           {/* 关键字搜索 */}
           <div className="relative flex items-center">
             <input
@@ -172,17 +185,18 @@ export const LogView: React.FC<LogViewProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               className="
-                w-40 px-2 py-1 text-xs
-                bg-stone-95 border border-stone-70 rounded
-                text-stone-100 placeholder-stone-50
-                focus:outline-none focus:border-btn-primary-active
+                w-44 px-3 py-1.5 text-xs rounded-md
+                bg-[#0d1117] border border-[#30363d]
+                text-zinc-100 placeholder-zinc-500
+                focus:outline-none focus:border-emerald-500 focus:ring-1 focus:ring-emerald-500
+                transition-all
               "
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="absolute right-1 text-xs text-stone-40 hover:text-stone-20"
+                className="absolute right-2 text-xs text-zinc-400 hover:text-zinc-100 cursor-pointer"
               >
                 &times;
               </button>
@@ -195,11 +209,11 @@ export const LogView: React.FC<LogViewProps> = ({
             data-testid="log-autoscroll-toggle"
             onClick={() => setAutoScroll(!autoScroll)}
             className={`
-              px-2 py-1 text-xs rounded border cursor-pointer select-none transition-colors
+              px-3 py-1.5 text-xs rounded-md border cursor-pointer select-none transition-colors font-medium
               ${
                 autoScroll
-                  ? 'bg-grass-80/40 border-grass-80 text-white font-bold'
-                  : 'bg-stone-80 border-stone-70 text-stone-40'
+                  ? 'bg-emerald-950/80 border-emerald-600 text-emerald-300 font-bold'
+                  : 'bg-[#21262d] border-[#30363d] text-zinc-400 hover:text-zinc-200'
               }
             `}
           >
@@ -211,9 +225,9 @@ export const LogView: React.FC<LogViewProps> = ({
             type="button"
             onClick={handleCopyAll}
             className="
-              px-2 py-1 text-xs rounded
-              bg-stone-80 hover:bg-stone-70 border border-stone-60
-              text-stone-20 hover:text-white cursor-pointer select-none transition-colors
+              px-3 py-1.5 text-xs rounded-md
+              bg-[#21262d] hover:bg-[#30363d] border border-[#30363d]
+              text-zinc-200 hover:text-white cursor-pointer select-none transition-colors font-medium
             "
           >
             {copyFeedback ? '已复制 ✓' : '复制全部'}
@@ -224,9 +238,9 @@ export const LogView: React.FC<LogViewProps> = ({
             type="button"
             onClick={onClear}
             className="
-              px-2 py-1 text-xs rounded
-              bg-stone-80 hover:bg-stone-70 border border-stone-60
-              text-stone-20 hover:text-white cursor-pointer select-none transition-colors
+              px-3 py-1.5 text-xs rounded-md
+              bg-[#21262d] hover:bg-[#30363d] border border-[#30363d]
+              text-zinc-200 hover:text-white cursor-pointer select-none transition-colors font-medium
             "
           >
             清空
@@ -239,8 +253,8 @@ export const LogView: React.FC<LogViewProps> = ({
               data-testid="log-kill-button"
               onClick={onKill}
               className="
-                px-2.5 py-1 text-xs rounded font-bold
-                bg-redstone-100 hover:bg-red-700 text-white border border-red-900
+                px-3 py-1.5 text-xs rounded-md font-bold
+                bg-rose-700 hover:bg-rose-600 text-white border border-rose-800
                 cursor-pointer select-none transition-colors shadow-sm
               "
             >
@@ -253,8 +267,8 @@ export const LogView: React.FC<LogViewProps> = ({
       {/* 日志级别筛选栏 */}
       <div
         className="
-          flex items-center gap-1 px-3 py-1.5
-          bg-stone-95 border-b border-stone-80 text-xs shrink-0
+          flex items-center gap-1.5 px-4 py-1.5
+          bg-[#0d1117] border-b border-[#21262d] text-xs shrink-0 font-sans
         "
       >
         {(['ALL', 'INFO', 'WARN', 'ERROR', 'DEBUG'] as LevelFilter[]).map((level) => {
@@ -266,11 +280,11 @@ export const LogView: React.FC<LogViewProps> = ({
               type="button"
               onClick={() => setActiveLevel(level)}
               className={`
-                px-2.5 py-0.5 rounded text-[11px] border cursor-pointer select-none transition-all
+                px-3 py-0.5 rounded-full text-[11px] cursor-pointer select-none transition-all
                 ${
                   isActive
-                    ? 'bg-btn-primary-bg text-btn-primary-text border-grass-80 font-bold'
-                    : 'bg-stone-85 text-stone-40 hover:text-stone-20 border-transparent hover:border-stone-70'
+                    ? 'bg-emerald-600 text-white font-bold shadow-sm'
+                    : 'bg-[#21262d] text-zinc-400 hover:text-zinc-200 hover:bg-[#30363d]'
                 }
               `}
             >
@@ -278,7 +292,7 @@ export const LogView: React.FC<LogViewProps> = ({
             </button>
           );
         })}
-        <div className="ml-auto text-[11px] text-stone-50">
+        <div className="ml-auto text-[11px] text-zinc-500 font-mono">
           显示 {filteredLogs.length} / {logs.length} 行
         </div>
       </div>
@@ -289,28 +303,28 @@ export const LogView: React.FC<LogViewProps> = ({
         data-testid="log-scroll-container"
         className="
           flex-1 overflow-y-auto p-3 font-mono text-[12px] leading-relaxed
-          bg-[#141517] space-y-0.5 select-text
+          bg-[#0d1117] space-y-0.5 select-text
         "
       >
         {filteredLogs.length === 0 ? (
-          <div className="flex items-center justify-center h-full text-stone-500 text-xs font-fusion">
+          <div className="flex items-center justify-center h-full text-zinc-500 text-xs font-sans">
             {logs.length === 0 ? '暂无日志输出，启动游戏后将在此处实时流式显示...' : '没有符合当前过滤条件的日志'}
           </div>
         ) : (
           filteredLogs.map((log) => (
             <div
               key={log.id}
-              className="flex items-start gap-2 hover:bg-stone-800/50 px-1 py-0.5 rounded transition-colors font-mono"
+              className="flex items-start gap-2.5 hover:bg-[#161b22] px-2 py-0.5 rounded transition-colors font-mono"
             >
               {/* 时间戳 */}
-              <span className="text-stone-500 shrink-0 select-none text-[11px]">
+              <span className="text-zinc-500 shrink-0 select-none text-[11px]">
                 [{log.timestamp}]
               </span>
 
               {/* 日志级别徽章 */}
               <span
                 className={`
-                  text-[10px] px-1 py-0.2 rounded border font-bold shrink-0 select-none uppercase
+                  text-[10px] px-1.5 py-0.2 rounded font-bold shrink-0 select-none uppercase
                   ${getLevelBadgeClass(log.level)}
                 `}
               >
