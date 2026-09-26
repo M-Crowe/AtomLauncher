@@ -1,4 +1,4 @@
-import type { JavaRuntime, LauncherSettings } from '../types/settings';
+import type { JavaRuntime, LauncherSettings, DownloadSource, AfterLaunchBehavior } from '../types/settings';
 
 export const SETTINGS_STORAGE_KEY = 'atom_launcher_settings_v1';
 
@@ -97,6 +97,9 @@ export const DEFAULT_SETTINGS: LauncherSettings = {
   uiScale: 100,
 };
 
+const VALID_DOWNLOAD_SOURCES: readonly DownloadSource[] = ['bmclapi', 'mojang', 'mcbbs'];
+const VALID_AFTER_LAUNCH: readonly AfterLaunchBehavior[] = ['keep', 'minimize', 'close'];
+
 export function loadLauncherSettings(): LauncherSettings {
   if (typeof window === 'undefined' || !window.localStorage) {
     return { ...DEFAULT_SETTINGS };
@@ -105,9 +108,33 @@ export function loadLauncherSettings(): LauncherSettings {
     const raw = window.localStorage.getItem(SETTINGS_STORAGE_KEY);
     if (!raw) return { ...DEFAULT_SETTINGS };
     const parsed = JSON.parse(raw);
+    const allocatedMemory =
+      typeof parsed.allocatedMemory === 'number' && parsed.allocatedMemory >= 1024
+        ? parsed.allocatedMemory
+        : DEFAULT_SETTINGS.allocatedMemory;
+    const minMemory =
+      typeof parsed.minMemory === 'number' && parsed.minMemory >= 512
+        ? Math.min(parsed.minMemory, allocatedMemory)
+        : Math.min(DEFAULT_SETTINGS.minMemory, allocatedMemory);
+    const downloadSource =
+      typeof parsed.downloadSource === 'string' && VALID_DOWNLOAD_SOURCES.includes(parsed.downloadSource as DownloadSource)
+        ? (parsed.downloadSource as DownloadSource)
+        : DEFAULT_SETTINGS.downloadSource;
+    const afterLaunch =
+      typeof parsed.afterLaunch === 'string' && VALID_AFTER_LAUNCH.includes(parsed.afterLaunch as AfterLaunchBehavior)
+        ? (parsed.afterLaunch as AfterLaunchBehavior)
+        : DEFAULT_SETTINGS.afterLaunch;
+
     return {
       ...DEFAULT_SETTINGS,
       ...parsed,
+      windowWidth: typeof parsed.windowWidth === 'number' && parsed.windowWidth >= 320 ? parsed.windowWidth : DEFAULT_SETTINGS.windowWidth,
+      windowHeight: typeof parsed.windowHeight === 'number' && parsed.windowHeight >= 240 ? parsed.windowHeight : DEFAULT_SETTINGS.windowHeight,
+      allocatedMemory,
+      minMemory,
+      downloadSource,
+      afterLaunch,
+      downloadThreads: typeof parsed.downloadThreads === 'number' && parsed.downloadThreads >= 2 && parsed.downloadThreads <= 64 ? parsed.downloadThreads : DEFAULT_SETTINGS.downloadThreads,
       autoClose: parsed.afterLaunch ? parsed.afterLaunch === 'minimize' : (parsed.autoClose ?? DEFAULT_SETTINGS.autoClose),
     };
   } catch {
@@ -118,9 +145,35 @@ export function loadLauncherSettings(): LauncherSettings {
 export function saveLauncherSettings(settings: LauncherSettings): void {
   if (typeof window === 'undefined' || !window.localStorage) return;
   try {
-    const toSave = {
+    const allocatedMemory =
+      typeof settings.allocatedMemory === 'number' && settings.allocatedMemory >= 1024
+        ? settings.allocatedMemory
+        : DEFAULT_SETTINGS.allocatedMemory;
+    const minMemory = Math.min(
+      typeof settings.minMemory === 'number' && settings.minMemory >= 512
+        ? settings.minMemory
+        : DEFAULT_SETTINGS.minMemory,
+      allocatedMemory
+    );
+    const downloadSource =
+      typeof settings.downloadSource === 'string' && VALID_DOWNLOAD_SOURCES.includes(settings.downloadSource)
+        ? settings.downloadSource
+        : DEFAULT_SETTINGS.downloadSource;
+    const afterLaunch =
+      typeof settings.afterLaunch === 'string' && VALID_AFTER_LAUNCH.includes(settings.afterLaunch)
+        ? settings.afterLaunch
+        : DEFAULT_SETTINGS.afterLaunch;
+
+    const toSave: LauncherSettings = {
       ...settings,
-      autoClose: settings.afterLaunch === 'minimize',
+      windowWidth: typeof settings.windowWidth === 'number' && settings.windowWidth >= 320 ? settings.windowWidth : DEFAULT_SETTINGS.windowWidth,
+      windowHeight: typeof settings.windowHeight === 'number' && settings.windowHeight >= 240 ? settings.windowHeight : DEFAULT_SETTINGS.windowHeight,
+      allocatedMemory,
+      minMemory,
+      downloadSource,
+      afterLaunch,
+      downloadThreads: typeof settings.downloadThreads === 'number' && settings.downloadThreads >= 2 && settings.downloadThreads <= 64 ? settings.downloadThreads : DEFAULT_SETTINGS.downloadThreads,
+      autoClose: afterLaunch === 'minimize',
     };
     window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(toSave));
   } catch (err) {
