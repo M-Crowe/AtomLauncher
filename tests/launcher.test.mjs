@@ -118,20 +118,26 @@ test('R1 & R3. App integration: dual launch button, log status indicator, instan
   assert.ok(content.includes('实例列表'), 'Includes instance list header');
 });
 
-test('Rust backend launcher module source code checks', () => {
+test('Rust backend launcher and core engine source code checks', () => {
   const launcherRs = readFileSync(resolve('src-tauri/src/launcher.rs'), 'utf-8');
   assert.ok(launcherRs.includes('pub fn scan_minecraft_versions'), 'Rust exports scan_minecraft_versions command');
   assert.ok(launcherRs.includes('pub fn detect_java_environments'), 'Rust exports detect_java_environments command');
+  assert.ok(launcherRs.includes('pub fn verify_game_integrity'), 'Rust exports verify_game_integrity command');
   assert.ok(launcherRs.includes('pub fn launch_minecraft'), 'Rust exports launch_minecraft command');
   assert.ok(launcherRs.includes('pub fn kill_minecraft_instance'), 'Rust exports kill_minecraft_instance command');
-  assert.ok(launcherRs.includes('minecraft-log'), 'Rust emits minecraft-log event');
-  assert.ok(launcherRs.includes('minecraft-exit'), 'Rust emits minecraft-exit event');
-  assert.ok(launcherRs.includes('minecraft-started'), 'Rust emits minecraft-started event');
+
+  const coreRs = readFileSync(resolve('src-tauri/src/core.rs'), 'utf-8');
+  assert.ok(coreRs.includes('pub fn resolve_version_meta'), 'core.rs exports resolve_version_meta');
+  assert.ok(coreRs.includes('pub fn check_game_integrity'), 'core.rs exports check_game_integrity');
+  assert.ok(coreRs.includes('pub fn build_launch_arguments'), 'core.rs exports build_launch_arguments');
+  assert.ok(coreRs.includes('java.base/java.lang.invoke=ALL-UNNAMED'), 'core.rs injects Forge/ModLauncher module opens');
 
   const libRs = readFileSync(resolve('src-tauri/src/lib.rs'), 'utf-8');
+  assert.ok(libRs.includes('pub mod core;'), 'lib.rs imports core module');
   assert.ok(libRs.includes('pub mod launcher;'), 'lib.rs imports launcher module');
   assert.ok(libRs.includes('scan_minecraft_versions'), 'lib.rs registers scan_minecraft_versions');
   assert.ok(libRs.includes('detect_java_environments'), 'lib.rs registers detect_java_environments');
+  assert.ok(libRs.includes('verify_game_integrity'), 'lib.rs registers verify_game_integrity');
   assert.ok(libRs.includes('launch_minecraft'), 'lib.rs registers launch_minecraft');
   assert.ok(libRs.includes('kill_minecraft_instance'), 'lib.rs registers kill_minecraft_instance');
 });

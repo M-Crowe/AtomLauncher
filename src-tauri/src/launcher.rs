@@ -623,24 +623,35 @@ fn get_current_time_str() -> String {
 }
 
 #[tauri::command]
+pub fn verify_game_integrity(
+    game_dir: String,
+    version_id: String,
+) -> Result<crate::core::IntegrityReport, String> {
+    let p = PathBuf::from(game_dir);
+    Ok(crate::core::check_game_integrity(&p, &version_id))
+}
+
+#[tauri::command]
 pub fn launch_minecraft(
     app: AppHandle,
     options: LaunchOptions,
 ) -> Result<LaunchResult, String> {
-    let mut java_path = options.java_path.trim().to_string();
+    let game_dir = PathBuf::from(&options.game_dir);
+    if !game_dir.exists() {
+        return Err(format!("游戏主目录不存在: {}", options.game_dir));
+    }
 
-    // 智能版本匹配与自适应提升（例如 26.x / snapshot 需 Java 25，1.21 需 Java 21）
+    // 1. 深度解析版本元数据与继承链 (Inheritance)
+    let meta = crate::core::resolve_version_meta(&game_dir, &options.version_id)
+        .map_err(|e| format!("解析版本信息失败: {e}"))?;
+
+    // 2. 依据版本需求精准选择 Java 运行时（例如 MC Eternal 2 / 1.18~1.20 选 Java 17，26.3 快照选 Java 25，1.21 选 Java 21）
+    let mut java_path = options.java_path.trim().to_string();
     if let Ok(runtimes) = detect_java_environments() {
-        if options.version_id.starts_with("26.") || options.version_id.contains("snapshot") {
-            if let Some(j25) = runtimes.iter().find(|r| r.major_version >= 25) {
-                java_path = j25.path.clone();
-            } else if let Some(j21) = runtimes.iter().find(|r| r.major_version >= 21) {
-                java_path = j21.path.clone();
-            }
-        } else if options.version_id.starts_with("1.21") || options.version_id.starts_with("1.20.5") || options.version_id.starts_with("1.20.6") {
-            if let Some(j21) = runtimes.iter().find(|r| r.major_version >= 21) {
-                java_path = j21.path.clone();
-            }
+        if let Some(exact) = runtimes.iter().find(|r| r.major_version == meta.java_major_version) {
+            java_path = exact.path.clone();
+        } else if let Some(compatible) = runtimes.iter().find(|r| r.major_version >= meta.java_major_version) {
+            java_path = compatible.path.clone();
         } else if java_path == "javaw.exe" || java_path == "java.exe" || java_path.is_empty() {
             if let Some(first) = runtimes.first() {
                 java_path = first.path.clone();
@@ -652,15 +663,7 @@ pub fn launch_minecraft(
         return Err("Java 路径不能为空，请在设置中配置有效 Java 运行时".to_string());
     }
 
-    let game_dir = PathBuf::from(&options.game_dir);
-    if !game_dir.exists() {
-        return Err(format!("游戏主目录不存在: {}", options.game_dir));
-    }
-
     let version_dir = game_dir.join("versions").join(&options.version_id);
-    let version_json_path = version_dir.join(format!("{}.json", options.version_id));
-
-    // Determine launch working directory (isolation mode)
     let is_isolated = options.version_isolation.unwrap_or(true);
     let work_dir = if is_isolated {
         let iso_dir = version_dir.clone();
@@ -672,71 +675,19 @@ pub fn launch_minecraft(
         game_dir.clone()
     };
 
-    // Determine main class and classpath
-    let mut main_class = "net.minecraft.client.main.Main".to_string();
-    let mut classpath_entries: Vec<PathBuf> = Vec::new();
-
-    // Check version jar
-    let version_jar = version_dir.join(format!("{}.jar", options.version_id));
-    if version_jar.exists() {
-        classpath_entries.push(version_jar);
-    }
-
-    if version_json_path.exists() {
-        if let Ok(content) = fs::read_to_string(&version_json_path) {
-            if let Ok(v) = serde_json::from_str::<serde_json::Value>(&content) {
-                if let Some(mc) = v.get("mainClass").and_then(|x| x.as_str()) {
-                    main_class = mc.to_string();
-                }
-
-                // Parse libraries
-                if let Some(libs) = v.get("libraries").and_then(|x| x.as_array()) {
-                    let libraries_root = game_dir.join("libraries");
-                    for lib in libs {
-                        if let Some(downloads) = lib.get("downloads") {
-                            if let Some(artifact) = downloads.get("artifact") {
-                                if let Some(path) = artifact.get("path").and_then(|x| x.as_str()) {
-                                    let lib_path = libraries_root.join(path);
-                                    if lib_path.exists() {
-                                        classpath_entries.push(lib_path);
-                                    }
-                                }
-                            }
-                        } else if let Some(name) = lib.get("name").and_then(|x| x.as_str()) {
-                            // Maven format: group:artifact:version
-                            let parts: Vec<&str> = name.split(':').collect();
-                            if parts.len() >= 3 {
-                                let group_path = parts[0].replace('.', "/");
-                                let artifact_name = parts[1];
-                                let version_str = parts[2];
-                                let jar_name = format!("{artifact_name}-{version_str}.jar");
-                                let lib_path = libraries_root
-                                    .join(group_path)
-                                    .join(artifact_name)
-                                    .join(version_str)
-                                    .join(jar_name);
-                                if lib_path.exists() {
-                                    classpath_entries.push(lib_path);
-                                }
-                            }
-                        }
-                    }
-                }
-            }
-        }
-    }
-
-    let cp_separator = if cfg!(windows) { ";" } else { ":" };
-    let classpath_str = if classpath_entries.is_empty() {
-        // Fallback placeholder cp
-        ".".to_string()
-    } else {
-        classpath_entries
-            .iter()
-            .map(|p| p.to_string_lossy().to_string())
-            .collect::<Vec<_>>()
-            .join(cp_separator)
-    };
+    let username = options.username.unwrap_or_else(|| "Player".to_string());
+    let (jvm_flags, game_flags) = crate::core::build_launch_arguments(
+        &meta,
+        &game_dir,
+        &work_dir,
+        meta.java_major_version,
+        &username,
+        "00000000-0000-0000-0000-000000000000",
+        "00000000000000000000000000000000",
+        options.window_width,
+        options.window_height,
+        options.fullscreen.unwrap_or(false),
+    );
 
     let mut cmd = Command::new(&java_path);
     cmd.current_dir(&work_dir);
@@ -747,43 +698,47 @@ pub fn launch_minecraft(
     cmd.arg(format!("-Xmx{xmx}M"));
     cmd.arg(format!("-Xms{xms}M"));
 
-    // Custom JVM Args
+    // 注入核心引擎构建的完整 JVM 参数（含 --add-opens 模块解锁）
+    for flag in &jvm_flags {
+        cmd.arg(flag);
+    }
+
+    // 用户自定义 JVM 参数
     if let Some(jvm_args) = options.jvm_args {
         for arg in jvm_args.split_whitespace() {
-            if !arg.is_empty() {
+            if !arg.is_empty() && !jvm_flags.contains(&arg.to_string()) {
                 cmd.arg(arg);
             }
         }
     }
 
-    // Classpath & Main Class
+    // Classpath
+    let cp_separator = if cfg!(windows) { ";" } else { ":" };
+    let classpath_str = if meta.classpath_entries.is_empty() {
+        ".".to_string()
+    } else {
+        meta.classpath_entries
+            .iter()
+            .map(|p| p.to_string_lossy().to_string())
+            .collect::<Vec<_>>()
+            .join(cp_separator)
+    };
     cmd.arg("-cp");
     cmd.arg(&classpath_str);
-    cmd.arg(&main_class);
 
-    // Game arguments
-    let username = options.username.unwrap_or_else(|| "Player".to_string());
-    cmd.arg("--username").arg(&username);
-    cmd.arg("--version").arg(&options.version_id);
-    cmd.arg("--gameDir").arg(work_dir.to_string_lossy().to_string());
-    cmd.arg("--assetsDir").arg(game_dir.join("assets").to_string_lossy().to_string());
-    cmd.arg("--versionType").arg("AtomLauncher");
+    // Main Class
+    cmd.arg(&meta.main_class);
 
-    if let Some(w) = options.window_width {
-        cmd.arg("--width").arg(w.to_string());
-    }
-    if let Some(h) = options.window_height {
-        cmd.arg("--height").arg(h.to_string());
-    }
-    if options.fullscreen.unwrap_or(false) {
-        cmd.arg("--fullscreen");
+    // Game Arguments
+    for arg in &game_flags {
+        cmd.arg(arg);
     }
 
     // Setup streaming pipes
     cmd.stdout(Stdio::piped());
     cmd.stderr(Stdio::piped());
 
-    let command_summary = format!("{java_path} -Xmx{xmx}M -Xms{xms}M ... {main_class} --version {}", options.version_id);
+    let command_summary = format!("{java_path} -Xmx{xmx}M -Xms{xms}M ... {} --version {}", meta.main_class, options.version_id);
 
     let mut child = cmd.spawn().map_err(|e| format!("拉起游戏进程失败: {e} (请检查 Java 路径与环境)"))?;
     let pid = child.id();

@@ -36,9 +36,11 @@ fn run_plugin_wasm(
     Ok(res)
 }
 
+pub mod core;
 pub mod launcher;
 use launcher::{
     detect_java_environments, kill_minecraft_instance, launch_minecraft, scan_minecraft_versions,
+    verify_game_integrity,
 };
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -76,6 +78,7 @@ pub fn run() {
             read_plugin_file,
             scan_minecraft_versions,
             detect_java_environments,
+            verify_game_integrity,
             launch_minecraft,
             kill_minecraft_instance
         ])
