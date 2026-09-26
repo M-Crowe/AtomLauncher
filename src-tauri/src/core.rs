@@ -411,7 +411,7 @@ pub fn build_launch_arguments(
     let natives_dir = work_dir.join("natives");
     let assets_dir = game_dir.join("assets");
 
-    // 1. 对于 Java 9+ (Java 16/17/21/25) 注入完整的 Module Open/Export 标志（彻底解决 Forge/NeoForge/ModLauncher 的 InaccessibleObjectException）
+    // 1. 对于 Java 9+ (Java 16/17/21/25) 注入标准单标记格式的 --add-opens=... 与 --add-exports=...（防止参数拆分被误认为主类）
     if java_major >= 9 {
         let module_opens = [
             "java.base/java.lang=ALL-UNNAMED",
@@ -424,17 +424,26 @@ pub fn build_launch_arguments(
             "java.base/java.nio=ALL-UNNAMED",
             "java.base/sun.nio.ch=ALL-UNNAMED",
             "java.base/java.net=ALL-UNNAMED",
+            "java.base/jdk.internal.misc=ALL-UNNAMED",
         ];
 
         for open in module_opens {
-            jvm_args.push("--add-opens".to_string());
-            jvm_args.push(open.to_string());
+            let flag = format!("--add-opens={open}");
+            if !jvm_args.contains(&flag) {
+                jvm_args.push(flag);
+            }
         }
 
-        jvm_args.push("--add-exports".to_string());
-        jvm_args.push("jdk.naming.dns/com.sun.jndi.dns=java.naming".to_string());
-        jvm_args.push("--add-exports".to_string());
-        jvm_args.push("java.base/sun.security.util=ALL-UNNAMED".to_string());
+        let exports = [
+            "jdk.naming.dns/com.sun.jndi.dns=java.naming",
+            "java.base/sun.security.util=ALL-UNNAMED",
+        ];
+        for exp in exports {
+            let flag = format!("--add-exports={exp}");
+            if !jvm_args.contains(&flag) {
+                jvm_args.push(flag);
+            }
+        }
     }
 
     // 2. 基础 JVM 系统属性
@@ -442,24 +451,45 @@ pub fn build_launch_arguments(
     jvm_args.push("-Dminecraft.launcher.brand=AtomLauncher".to_string());
     jvm_args.push("-Dminecraft.launcher.version=1.0.0".to_string());
 
-    // 3. 解析版本自带的 JVM 参数模板
-    let cp_separator = if cfg!(windows) { ";" } else { ":" };
-    let classpath_str = meta
-        .classpath_entries
-        .iter()
-        .map(|p| p.to_string_lossy().to_string())
-        .collect::<Vec<_>>()
-        .join(cp_separator);
+    // 3. 解析版本自带的 JVM 参数模板（过滤掉 -cp / -classpath / ${classpath}，统一交由启动器规范传入）
+    let mut idx = 0;
+    let raw_jvm = &meta.jvm_args_template;
+    while idx < raw_jvm.len() {
+        let arg = &raw_jvm[idx];
+        if arg == "-cp" || arg == "-classpath" || arg == "${classpath}" {
+            idx += 1;
+            continue;
+        }
 
-    for arg in &meta.jvm_args_template {
+        if arg == "--add-opens" && idx + 1 < raw_jvm.len() {
+            let next = &raw_jvm[idx + 1];
+            let flag = format!("--add-opens={next}");
+            if !jvm_args.contains(&flag) {
+                jvm_args.push(flag);
+            }
+            idx += 2;
+            continue;
+        }
+
+        if arg == "--add-exports" && idx + 1 < raw_jvm.len() {
+            let next = &raw_jvm[idx + 1];
+            let flag = format!("--add-exports={next}");
+            if !jvm_args.contains(&flag) {
+                jvm_args.push(flag);
+            }
+            idx += 2;
+            continue;
+        }
+
         let mut replaced = arg.clone();
         replaced = replaced.replace("${natives_directory}", &natives_dir.to_string_lossy());
         replaced = replaced.replace("${launcher_name}", "AtomLauncher");
         replaced = replaced.replace("${launcher_version}", "1.0.0");
-        replaced = replaced.replace("${classpath}", &classpath_str);
-        if !replaced.is_empty() && !jvm_args.contains(&replaced) {
+        
+        if !replaced.is_empty() && !jvm_args.contains(&replaced) && !replaced.contains("${classpath}") {
             jvm_args.push(replaced);
         }
+        idx += 1;
     }
 
     // 4. 解析 Game 参数
