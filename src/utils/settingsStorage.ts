@@ -1,3 +1,4 @@
+import { invoke } from '@tauri-apps/api/core';
 import type { JavaRuntime, LauncherSettings, DownloadSource, AfterLaunchBehavior } from '../types/settings';
 
 export const SETTINGS_STORAGE_KEY = 'atom_launcher_settings_v1';
@@ -182,20 +183,15 @@ export function saveLauncherSettings(settings: LauncherSettings): void {
 }
 
 export async function scanSystemJavaRuntimes(): Promise<JavaRuntime[]> {
-  // 模拟异步扫描系统 PATH, 注册表, Program Files 及标准 JVM 目录
-  await new Promise((resolve) => setTimeout(resolve, 600));
-  return [
-    ...DEFAULT_JAVA_RUNTIMES,
-    {
-      id: 'jdk-11-corretto',
-      name: 'Amazon Corretto OpenJDK 11 (LTS)',
-      path: 'C:\\Program Files\\Amazon Corretto\\jdk11.0.22_7\\bin\\javaw.exe',
-      version: '11.0.22',
-      majorVersion: 11,
-      arch: 'x64',
-      vendor: 'Amazon',
-      recommendedFor: 'Minecraft 1.12 - 1.16.5 模组包',
-      isAutoDetected: true,
-    },
-  ];
+  try {
+    if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
+      const detected = await invoke<JavaRuntime[]>('detect_java_environments');
+      if (Array.isArray(detected)) {
+        return detected;
+      }
+    }
+  } catch (err) {
+    console.warn('Tauri detect_java_environments invocation failed:', err);
+  }
+  return [...DEFAULT_JAVA_RUNTIMES];
 }

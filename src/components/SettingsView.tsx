@@ -296,16 +296,55 @@ export const SettingsView: React.FC = () => {
     };
   }, [settings]);
 
+  // 组件挂载时自动扫描本机真实安装的 Java 运行环境
+  useEffect(() => {
+    let isSubscribed = true;
+    scanSystemJavaRuntimes().then((detected) => {
+      if (!isSubscribed) return;
+      if (detected.length > 0) {
+        setRuntimes(detected);
+        setSettings((prev) => {
+          if (!prev.selectedJavaId || !detected.some((r) => r.id === prev.selectedJavaId)) {
+            const recommended = detected.find((r) => r.majorVersion === 21) || detected[0];
+            return {
+              ...prev,
+              selectedJavaId: recommended.id,
+            };
+          }
+          return prev;
+        });
+      }
+    });
+    return () => {
+      isSubscribed = false;
+    };
+  }, []);
+
   // 扫描系统 Java 运行时
   const handleScanJava = async () => {
     setIsScanning(true);
-    setScanMessage('正在扫描系统环境与 JDK 注册表...');
+    setScanMessage('正在扫描本机系统环境与 JDK 目录...');
     try {
       const detected = await scanSystemJavaRuntimes();
       if (!isMountedRef.current) return;
       setRuntimes(detected);
-      setScanMessage(`已成功检测到 ${detected.length} 个可用 Java 运行时`);
-      showToast(`已扫描到 ${detected.length} 个 Java 运行时`);
+      if (detected.length > 0) {
+        setScanMessage(`已成功检测到 ${detected.length} 个实际安装的 Java 环境`);
+        showToast(`已检测到 ${detected.length} 个 Java 运行时`);
+        setSettings((prev) => {
+          if (!prev.selectedJavaId || !detected.some((r) => r.id === prev.selectedJavaId)) {
+            const recommended = detected.find((r) => r.majorVersion === 21) || detected[0];
+            return {
+              ...prev,
+              selectedJavaId: recommended.id,
+            };
+          }
+          return prev;
+        });
+      } else {
+        setScanMessage('未在常用路径检测到 Java，请在下方手动指定路径');
+        showToast('未检测到已安装的 Java');
+      }
     } catch {
       if (!isMountedRef.current) return;
       setScanMessage('扫描异常，请手动指定路径');
@@ -401,45 +440,51 @@ export const SettingsView: React.FC = () => {
               {/* 系统检测到的 Java 运行时列表 */}
               <div className="flex flex-col gap-2">
                 <span className="text-[12px] font-bold text-[#1F1F1F]">已检测到的系统 Java 运行时：</span>
-                <div className="flex flex-col gap-2">
-                  {runtimes.map((r) => {
-                    const isSelected = !settings.useCustomJava && settings.selectedJavaId === r.id;
-                    const selectJava = () =>
-                      setSettings((s) => ({
-                        ...s,
-                        useCustomJava: false,
-                        selectedJavaId: r.id,
-                      }));
-                    return (
-                      <label
-                        key={r.id}
-                        className={`p-3 ring-2 cursor-pointer transition-all flex flex-col gap-1 ${
-                          isSelected
-                            ? 'bg-stone-10 ring-[#2E5E1C] shadow-[2px_2px_0_0_#2E5E1C]'
-                            : 'bg-stone-10/70 ring-surface-slot/30 hover:bg-stone-10 hover:ring-surface-slot/60'
-                        }`}
-                      >
-                        <div className="flex items-center justify-between">
-                          <div className="flex items-center gap-2.5">
-                            <input
-                              type="radio"
-                              name="java-select"
-                              checked={isSelected}
-                              onChange={selectJava}
-                              className="accent-[#2E5E1C] cursor-pointer h-4 w-4"
-                            />
-                            <span className="font-bold text-[#1F1F1F] text-[13px]">{r.name}</span>
-                            <span className="text-[10px] px-1.5 py-0.2 bg-dirt-40/30 text-[#2F1F17] rounded font-mono font-bold">
-                              {r.arch}
-                            </span>
+                {runtimes.length === 0 ? (
+                  <div className="p-3 bg-dirt-10 text-[12px] text-[#2F1F1F] ring-1 ring-border-hard/30">
+                    未在常用系统路径检测到 Java 运行环境，请点击下方「手动指定自定义 Java 路径」或安装 JDK。
+                  </div>
+                ) : (
+                  <div className="flex flex-col gap-2">
+                    {runtimes.map((r) => {
+                      const isSelected = !settings.useCustomJava && settings.selectedJavaId === r.id;
+                      const selectJava = () =>
+                        setSettings((s) => ({
+                          ...s,
+                          useCustomJava: false,
+                          selectedJavaId: r.id,
+                        }));
+                      return (
+                        <label
+                          key={r.id}
+                          className={`p-3 ring-2 cursor-pointer transition-all flex flex-col gap-1 ${
+                            isSelected
+                              ? 'bg-stone-10 ring-[#2E5E1C] shadow-[2px_2px_0_0_#2E5E1C]'
+                              : 'bg-stone-10/70 ring-surface-slot/30 hover:bg-stone-10 hover:ring-surface-slot/60'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                              <input
+                                type="radio"
+                                name="java-select"
+                                checked={isSelected}
+                                onChange={selectJava}
+                                className="accent-[#2E5E1C] cursor-pointer h-4 w-4"
+                              />
+                              <span className="font-bold text-[#1F1F1F] text-[13px]">{r.name}</span>
+                              <span className="text-[10px] px-1.5 py-0.2 bg-dirt-40/30 text-[#2F1F17] rounded font-mono font-bold">
+                                {r.arch}
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-[#2E5E1C] font-bold">{r.recommendedFor}</span>
                           </div>
-                          <span className="text-[11px] text-[#2E5E1C] font-bold">{r.recommendedFor}</span>
-                        </div>
-                        <div className="text-[11px] text-[#2F1F17] font-mono truncate pl-6">{r.path}</div>
-                      </label>
-                    );
-                  })}
-                </div>
+                          <div className="text-[11px] text-[#2F1F17] font-mono truncate pl-6">{r.path}</div>
+                        </label>
+                      );
+                    })}
+                  </div>
+                )}
               </div>
 
               {/* 手动指定自定义 Java 路径 */}
