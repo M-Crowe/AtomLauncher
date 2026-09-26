@@ -3,41 +3,7 @@ import type { JavaRuntime, LauncherSettings, DownloadSource, AfterLaunchBehavior
 
 export const SETTINGS_STORAGE_KEY = 'atom_launcher_settings_v1';
 
-export const DEFAULT_JAVA_RUNTIMES: JavaRuntime[] = [
-  {
-    id: 'jdk-21-adoptium',
-    name: 'Eclipse Adoptium OpenJDK 21 (LTS)',
-    path: 'C:\\Program Files\\Eclipse Adoptium\\jdk-21.0.2.13-hotspot\\bin\\javaw.exe',
-    version: '21.0.2',
-    majorVersion: 21,
-    arch: 'x64',
-    vendor: 'Eclipse Adoptium',
-    recommendedFor: 'Minecraft 1.20.5+ / 1.21+ (强力推荐)',
-    isAutoDetected: true,
-  },
-  {
-    id: 'jdk-17-microsoft',
-    name: 'Microsoft Build of OpenJDK 17 (LTS)',
-    path: 'C:\\Program Files\\Microsoft\\jdk-17.0.10.7-hotspot\\bin\\javaw.exe',
-    version: '17.0.10',
-    majorVersion: 17,
-    arch: 'x64',
-    vendor: 'Microsoft',
-    recommendedFor: 'Minecraft 1.17 - 1.20.4 (官方推荐)',
-    isAutoDetected: true,
-  },
-  {
-    id: 'jre-8-oracle',
-    name: 'Oracle Java 8 SE Runtime Environment',
-    path: 'C:\\Program Files\\Java\\jre1.8.0_391\\bin\\javaw.exe',
-    version: '1.8.0_391',
-    majorVersion: 8,
-    arch: 'x64',
-    vendor: 'Oracle Corporation',
-    recommendedFor: 'Minecraft 1.16.5 及以下经典版本',
-    isAutoDetected: true,
-  },
-];
+export const DEFAULT_JAVA_RUNTIMES: JavaRuntime[] = [];
 
 export const MEMORY_PRESETS = [
   { label: '2G', value: 2048, desc: '轻量原版' },
@@ -73,8 +39,8 @@ export const JVM_ARG_PRESETS = [
 ];
 
 export const DEFAULT_SETTINGS: LauncherSettings = {
-  selectedJavaId: 'jdk-21-adoptium',
-  customJavaPath: 'C:\\Program Files\\Java\\jdk-21\\bin\\javaw.exe',
+  selectedJavaId: '',
+  customJavaPath: '',
   useCustomJava: false,
 
   allocatedMemory: 4096,
@@ -84,7 +50,7 @@ export const DEFAULT_SETTINGS: LauncherSettings = {
   fullscreen: false,
   jvmArgs: '-XX:+UseG1GC -XX:+UnlockExperimentalVMOptions',
 
-  gameDir: 'C:\\Users\\Default\\AppData\\Roaming\\.minecraft',
+  gameDir: 'C:\\Users\\XuanY\\AppData\\Roaming\\.minecraft',
   versionIsolation: true,
 
   downloadSource: 'bmclapi',
@@ -193,5 +159,60 @@ export async function scanSystemJavaRuntimes(): Promise<JavaRuntime[]> {
   } catch (err) {
     console.warn('Tauri detect_java_environments invocation failed:', err);
   }
-  return [...DEFAULT_JAVA_RUNTIMES];
+  return [];
 }
+
+export interface MinecraftInstance {
+  id: string;
+  name: string;
+  version: string;
+  lastPlayed: string;
+  loaderType: string;
+  modCount: number;
+  isValid: boolean;
+}
+
+export async function scanMinecraftInstances(gameDir?: string): Promise<MinecraftInstance[]> {
+  try {
+    if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
+      const list = await invoke<MinecraftInstance[]>('detect_minecraft_instances', { gameDir: gameDir || null });
+      if (Array.isArray(list)) return list;
+    }
+  } catch (err) {
+    console.warn('Failed to scan Minecraft instances:', err);
+  }
+  return [];
+}
+
+export async function fetchDefaultGameDir(): Promise<string> {
+  try {
+    if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
+      const dir = await invoke<string>('get_default_game_dir');
+      if (dir && dir.trim().length > 0) return dir;
+    }
+  } catch (err) {
+    console.warn('Failed to get default game dir from Tauri:', err);
+  }
+  return 'C:\\Users\\XuanY\\AppData\\Roaming\\.minecraft';
+}
+
+export async function measureDownloadSourceLatency(source: DownloadSource): Promise<number | null> {
+  const urlMap: Record<DownloadSource, string> = {
+    bmclapi: 'https://bmclapi2.bangbang93.com',
+    mojang: 'https://launchermeta.mojang.com',
+    mcbbs: 'https://download.mcbbs.net',
+  };
+  const targetUrl = urlMap[source];
+  if (!targetUrl) return null;
+  const start = performance.now();
+  try {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => controller.abort(), 3500);
+    await fetch(targetUrl, { method: 'HEAD', mode: 'no-cors', signal: controller.signal });
+    clearTimeout(timeout);
+    return Math.round(performance.now() - start);
+  } catch {
+    return null;
+  }
+}
+

@@ -9,6 +9,7 @@ import {
   loadLauncherSettings,
   saveLauncherSettings,
   scanSystemJavaRuntimes,
+  measureDownloadSourceLatency,
 } from '../utils/settingsStorage';
 
 import {
@@ -224,16 +225,16 @@ export const SettingsView: React.FC = () => {
   const [scanMessage, setScanMessage] = useState<string | null>(null);
   const [toastMessage, setToastMessage] = useState<string | null>(null);
   const [pingStatus, setPingStatus] = useState<Record<DownloadSource, number | null>>({
-    bmclapi: 18,
-    mojang: 186,
-    mcbbs: 45,
+    bmclapi: null,
+    mojang: null,
+    mcbbs: null,
   });
   const [isTestingPing, setIsTestingPing] = useState(false);
 
   const isMountedRef = useRef(true);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
   const scanTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
-  const pingTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const customJavaInputRef = useRef<HTMLInputElement | null>(null);
 
   // 监听并实时存储设置
   useEffect(() => {
@@ -260,7 +261,6 @@ export const SettingsView: React.FC = () => {
       isMountedRef.current = false;
       if (toastTimeoutRef.current) clearTimeout(toastTimeoutRef.current);
       if (scanTimeoutRef.current) clearTimeout(scanTimeoutRef.current);
-      if (pingTimeoutRef.current) clearTimeout(pingTimeoutRef.current);
     };
   }, []);
 
@@ -362,23 +362,27 @@ export const SettingsView: React.FC = () => {
     }
   };
 
-  // 测速
+  // 真实测速
   const handleTestPing = async () => {
     setIsTestingPing(true);
-    showToast('正在对各下载镜像源进行延迟测速...');
-    if (pingTimeoutRef.current) clearTimeout(pingTimeoutRef.current);
-    pingTimeoutRef.current = setTimeout(() => {
+    showToast('正在向各镜像源节点发送真实网络测速请求...');
+    try {
+      const [bmclapi, mojang, mcbbs] = await Promise.all([
+        measureDownloadSourceLatency('bmclapi'),
+        measureDownloadSourceLatency('mojang'),
+        measureDownloadSourceLatency('mcbbs'),
+      ]);
+      if (!isMountedRef.current) return;
+      setPingStatus({ bmclapi, mojang, mcbbs });
+      showToast('镜像源真实网络测速完成');
+    } catch {
+      if (!isMountedRef.current) return;
+      showToast('测速网络超时或异常');
+    } finally {
       if (isMountedRef.current) {
-        setPingStatus({
-          bmclapi: Math.floor(12 + Math.random() * 15),
-          mojang: Math.floor(160 + Math.random() * 60),
-          mcbbs: Math.floor(35 + Math.random() * 25),
-        });
         setIsTestingPing(false);
-        showToast('下载源延迟测速完成');
-        pingTimeoutRef.current = null;
       }
-    }, 800);
+    }
   };
 
   // 获取当前生效的 Java 路径展示
@@ -505,23 +509,26 @@ export const SettingsView: React.FC = () => {
 
                 <div className="flex gap-2.5 items-center">
                   <input
+                    ref={customJavaInputRef}
                     type="text"
                     value={settings.customJavaPath}
                     disabled={!settings.useCustomJava}
                     onChange={(e) => setSettings((s) => ({ ...s, customJavaPath: e.target.value, useCustomJava: true }))}
-                    placeholder="C:\Path\To\bin\javaw.exe"
+                    placeholder="请输入或粘贴 javaw.exe 完整路径 (如 C:\...\bin\javaw.exe)"
                     className="flex-1 bg-white px-3 py-2 ring-1 ring-inset ring-[#A8988A] focus:ring-2 focus:ring-[#2E5E1C] text-[12px] text-[#1F1F1F] font-mono disabled:opacity-60 disabled:bg-stone-10/50 outline-none"
                   />
                   <button
                     type="button"
                     onClick={() => {
-                      const sample = 'C:\\Program Files\\Java\\jdk-21\\bin\\javaw.exe';
-                      setSettings((s) => ({ ...s, customJavaPath: sample, useCustomJava: true }));
-                      showToast('已载入自定义 Java 路径');
+                      setSettings((s) => ({ ...s, useCustomJava: true }));
+                      if (customJavaInputRef.current) {
+                        customJavaInputRef.current.focus();
+                      }
+                      showToast('请直接输入或粘贴本机 Java 程序的完整文件路径');
                     }}
                     className="px-3.5 py-2 bg-[#2E5E1C] hover:bg-[#3D7726] active:bg-[#1B3B11] text-white text-[12px] font-bold ring-2 ring-inset ring-[#1B3B11] shadow-[1px_1px_0_0_#1B3B11] cursor-pointer transition-colors"
                   >
-                    浏览
+                    指定路径
                   </button>
                 </div>
               </div>

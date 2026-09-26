@@ -256,6 +256,97 @@ fn detect_java_environments() -> Vec<DetectedJava> {
     results
 }
 
+#[derive(serde::Serialize, serde::Deserialize, Clone, Debug)]
+#[serde(rename_all = "camelCase")]
+pub struct MinecraftInstance {
+    pub id: String,
+    pub name: String,
+    pub version: String,
+    pub last_played: String,
+    pub loader_type: String,
+    pub mod_count: usize,
+    pub is_valid: bool,
+}
+
+// 获取系统真实 .minecraft 默认主目录
+#[tauri::command]
+fn get_default_game_dir() -> String {
+    if let Ok(appdata) = std::env::var("APPDATA") {
+        let p = PathBuf::from(appdata).join(".minecraft");
+        return p.to_string_lossy().to_string();
+    }
+    if let Ok(home) = std::env::var("USERPROFILE").or_else(|_| std::env::var("HOME")) {
+        let p = PathBuf::from(home).join(".minecraft");
+        return p.to_string_lossy().to_string();
+    }
+    String::from(".minecraft")
+}
+
+// 真实扫描本地已安装的 Minecraft 实例与版本
+#[tauri::command]
+fn detect_minecraft_instances(game_dir: Option<String>) -> Vec<MinecraftInstance> {
+    let base_dir = if let Some(d) = game_dir {
+        if !d.trim().is_empty() {
+            PathBuf::from(d)
+        } else {
+            PathBuf::from(get_default_game_dir())
+        }
+    } else {
+        PathBuf::from(get_default_game_dir())
+    };
+
+    let versions_dir = base_dir.join("versions");
+    let mut instances = Vec::new();
+
+    if let Ok(entries) = fs::read_dir(versions_dir) {
+        for entry in entries.flatten() {
+            let path = entry.path();
+            if path.is_dir() {
+                let dir_name = entry.file_name().to_string_lossy().to_string();
+                let json_file = path.join(format!("{}.json", dir_name));
+                let has_json = json_file.exists();
+                
+                // 检查模组数量
+                let mods_dir = path.join("mods");
+                let global_mods_dir = base_dir.join("mods");
+                let mut mod_count = 0;
+                if let Ok(mod_entries) = fs::read_dir(&mods_dir) {
+                    mod_count = mod_entries.flatten().filter(|e| e.path().extension().map_or(false, |ext| ext == "jar")).count();
+                } else if let Ok(mod_entries) = fs::read_dir(&global_mods_dir) {
+                    mod_count = mod_entries.flatten().filter(|e| e.path().extension().map_or(false, |ext| ext == "jar")).count();
+                }
+
+                let lower = dir_name.to_lowercase();
+                let loader_type = if lower.contains("fabric") {
+                    "Fabric"
+                } else if lower.contains("forge") {
+                    "Forge"
+                } else if lower.contains("neoforge") {
+                    "NeoForge"
+                } else if lower.contains("quilt") {
+                    "Quilt"
+                } else if lower.contains("optifine") {
+                    "OptiFine"
+                } else {
+                    "Vanilla"
+                };
+
+                instances.push(MinecraftInstance {
+                    id: dir_name.clone(),
+                    name: format!("{} ({})", dir_name, loader_type),
+                    version: dir_name,
+                    last_played: "本地已安装".to_string(),
+                    loader_type: loader_type.to_string(),
+                    mod_count,
+                    is_valid: has_json,
+                });
+            }
+        }
+    }
+
+    instances
+}
+
 // 3. 之前定义的 WASM 执行 Command
 #[tauri::command]
 fn run_plugin_wasm(
@@ -321,7 +412,9 @@ pub fn run() {
         .invoke_handler(tauri::generate_handler![
             run_plugin_wasm,
             read_plugin_file,
-            detect_java_environments
+            detect_java_environments,
+            get_default_game_dir,
+            detect_minecraft_instances
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

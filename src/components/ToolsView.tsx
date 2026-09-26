@@ -15,7 +15,6 @@ export const ToolsView: React.FC<ToolsViewProps> = ({
       {/* 顶部工具栏标题 */}
       <div className="px-5 py-3 border-b-2 border-surface-slot bg-dirt-20/25 flex items-center justify-between shrink-0 font-fusion">
         <div className="flex items-center gap-2">
-          <span className="text-lg">🛠️</span>
           <h2 className="text-[16px] font-bold text-btn-primary-active">WASM 插件与扩展工具箱</h2>
           <span className="text-[10px] px-2 py-0.5 bg-grass-80 text-white rounded">WebAssembly 沙箱</span>
         </div>

@@ -24,23 +24,11 @@ test('R3. Settings Data Model and Default Constants', () => {
 });
 
 test('R3. Java Runtimes & Smart Recommendation Specifications', async () => {
-  assert.ok(DEFAULT_JAVA_RUNTIMES.length >= 3, 'Contains standard Java runtimes (21, 17, 8)');
+  assert.equal(DEFAULT_JAVA_RUNTIMES.length, 0, 'No fake mock Java runtimes hardcoded in default array');
   
-  const jdk21 = DEFAULT_JAVA_RUNTIMES.find((r) => r.majorVersion === 21);
-  assert.ok(jdk21, 'JDK 21 is present');
-  assert.ok(jdk21.recommendedFor.includes('1.20.5+'), 'JDK 21 recommends 1.20.5+');
-
-  const jdk17 = DEFAULT_JAVA_RUNTIMES.find((r) => r.majorVersion === 17);
-  assert.ok(jdk17, 'JDK 17 is present');
-  assert.ok(jdk17.recommendedFor.includes('1.17'), 'JDK 17 recommends 1.17 - 1.20.4');
-
-  const jre8 = DEFAULT_JAVA_RUNTIMES.find((r) => r.majorVersion === 8);
-  assert.ok(jre8, 'Java 8 is present');
-  assert.ok(jre8.recommendedFor.includes('1.16.5'), 'Java 8 recommends 1.16.5 and below');
-
-  // 异步系统 Java 扫描测试
+  // 异步系统 Java 扫描测试 (Node 环境下安全返回空数组，真实 Tauri 环境下调用 IPC)
   const scanned = await scanSystemJavaRuntimes();
-  assert.ok(scanned.length >= DEFAULT_JAVA_RUNTIMES.length, 'Scan discovers additional installed runtimes');
+  assert.ok(Array.isArray(scanned), 'Scan returns an array of runtimes');
 });
 
 test('R3. JVM Memory & Resolution Quick Presets', () => {
