@@ -28,9 +28,12 @@ export type LauncherSettings = {
   fullscreen: boolean;
   jvmArgs: string;
 
-  // 3. 游戏目录与隔离
+  // 3. 游戏目录与多目录扫描
   gameDir: string;
   versionIsolation: boolean;
+  scanSystemDirs: boolean;
+  customDirs: string[];
+  selectedVersionId: string;
 
   // 4. 下载源与并发
   downloadSource: DownloadSource;

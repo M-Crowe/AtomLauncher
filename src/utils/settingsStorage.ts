@@ -1,4 +1,3 @@
-import { invoke } from '@tauri-apps/api/core';
 import type { JavaRuntime, LauncherSettings, DownloadSource, AfterLaunchBehavior } from '../types/settings';
 
 export const SETTINGS_STORAGE_KEY = 'atom_launcher_settings_v1';
@@ -52,6 +51,9 @@ export const DEFAULT_SETTINGS: LauncherSettings = {
 
   gameDir: 'C:\\Users\\XuanY\\AppData\\Roaming\\.minecraft',
   versionIsolation: true,
+  scanSystemDirs: true,
+  customDirs: [],
+  selectedVersionId: '',
 
   downloadSource: 'bmclapi',
   downloadThreads: 32,
@@ -64,8 +66,8 @@ export const DEFAULT_SETTINGS: LauncherSettings = {
   uiScale: 100,
 };
 
-const VALID_DOWNLOAD_SOURCES: readonly DownloadSource[] = ['bmclapi', 'mojang', 'mcbbs'];
-const VALID_AFTER_LAUNCH: readonly AfterLaunchBehavior[] = ['keep', 'minimize', 'close'];
+export const VALID_DOWNLOAD_SOURCES: readonly DownloadSource[] = ['bmclapi', 'mojang', 'mcbbs'];
+export const VALID_AFTER_LAUNCH: readonly AfterLaunchBehavior[] = ['keep', 'minimize', 'close'];
 
 export function loadLauncherSettings(): LauncherSettings {
   if (typeof window === 'undefined' || !window.localStorage) {
@@ -148,9 +150,21 @@ export function saveLauncherSettings(settings: LauncherSettings): void {
   }
 }
 
+export function getEffectiveJavaPath(settings: LauncherSettings, runtimes: JavaRuntime[] = []): string {
+  if (settings.useCustomJava && settings.customJavaPath && settings.customJavaPath.trim()) {
+    return settings.customJavaPath.trim();
+  }
+  const matched = runtimes.find((r) => r.id === settings.selectedJavaId);
+  if (matched?.path) {
+    return matched.path;
+  }
+  return runtimes[0]?.path || 'javaw.exe';
+}
+
 export async function scanSystemJavaRuntimes(): Promise<JavaRuntime[]> {
   try {
     if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
+      const { invoke } = await import('@tauri-apps/api/core');
       const detected = await invoke<JavaRuntime[]>('detect_java_environments');
       if (Array.isArray(detected)) {
         return detected;
@@ -160,40 +174,6 @@ export async function scanSystemJavaRuntimes(): Promise<JavaRuntime[]> {
     console.warn('Tauri detect_java_environments invocation failed:', err);
   }
   return [];
-}
-
-export interface MinecraftInstance {
-  id: string;
-  name: string;
-  version: string;
-  lastPlayed: string;
-  loaderType: string;
-  modCount: number;
-  isValid: boolean;
-}
-
-export async function scanMinecraftInstances(gameDir?: string): Promise<MinecraftInstance[]> {
-  try {
-    if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
-      const list = await invoke<MinecraftInstance[]>('detect_minecraft_instances', { gameDir: gameDir || null });
-      if (Array.isArray(list)) return list;
-    }
-  } catch (err) {
-    console.warn('Failed to scan Minecraft instances:', err);
-  }
-  return [];
-}
-
-export async function fetchDefaultGameDir(): Promise<string> {
-  try {
-    if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
-      const dir = await invoke<string>('get_default_game_dir');
-      if (dir && dir.trim().length > 0) return dir;
-    }
-  } catch (err) {
-    console.warn('Failed to get default game dir from Tauri:', err);
-  }
-  return 'C:\\Users\\XuanY\\AppData\\Roaming\\.minecraft';
 }
 
 export async function measureDownloadSourceLatency(source: DownloadSource): Promise<number | null> {

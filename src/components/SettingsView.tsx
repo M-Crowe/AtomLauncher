@@ -1,5 +1,5 @@
 import React, { useState, useEffect, useRef } from 'react';
-import type { JavaRuntime, LauncherSettings, DownloadSource, AfterLaunchBehavior } from '../types/settings';
+import type { JavaRuntime, LauncherSettings, DownloadSource } from '../types/settings';
 import {
   DEFAULT_SETTINGS,
   DEFAULT_JAVA_RUNTIMES,
@@ -41,7 +41,7 @@ export const SETTINGS_CATEGORIES: SettingsCategoryItem[] = [
     id: 'game',
     label: 'JVM 与游戏参数',
     subLabel: '游戏与参数',
-    desc: '游戏主目录、版本隔离与分辨率参数',
+    desc: '游戏主目录、版本隔离与多目录扫描',
   },
   {
     id: 'download',
@@ -53,7 +53,7 @@ export const SETTINGS_CATEGORIES: SettingsCategoryItem[] = [
     id: 'launcher',
     label: '启动器偏好',
     subLabel: '偏好与视觉',
-    desc: '启动动作、展台动效与关于系统',
+    desc: '启动动作、展台动效与系统设置',
   },
 ];
 
@@ -230,6 +230,7 @@ export const SettingsView: React.FC = () => {
     mcbbs: null,
   });
   const [isTestingPing, setIsTestingPing] = useState(false);
+  const [newCustomDir, setNewCustomDir] = useState('');
 
   const isMountedRef = useRef(true);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -383,6 +384,29 @@ export const SettingsView: React.FC = () => {
         setIsTestingPing(false);
       }
     }
+  };
+
+  const handleAddCustomDir = () => {
+    const trimmed = newCustomDir.trim();
+    if (!trimmed) return;
+    if (settings.customDirs?.includes(trimmed)) {
+      showToast('该路径已存在于列表中');
+      return;
+    }
+    setSettings((s) => ({
+      ...s,
+      customDirs: [...(s.customDirs || []), trimmed],
+    }));
+    setNewCustomDir('');
+    showToast('已添加自定义 .minecraft 目录');
+  };
+
+  const handleRemoveCustomDir = (dirToRemove: string) => {
+    setSettings((s) => ({
+      ...s,
+      customDirs: (s.customDirs || []).filter((d) => d !== dirToRemove),
+    }));
+    showToast('已移除该目录');
   };
 
   // 获取当前生效的 Java 路径展示
@@ -658,6 +682,63 @@ export const SettingsView: React.FC = () => {
                   className="h-4.5 w-4.5 accent-[#2E5E1C] cursor-pointer"
                 />
               </label>
+
+              {/* 全局常用目录扫描开关 */}
+              <label className="flex items-center justify-between cursor-pointer py-2.5 px-3 bg-dirt-10 ring-1 ring-border-hard/30">
+                <div className="flex flex-col">
+                  <span className="font-bold text-[#1F1F1F] text-[13px]">扫描系统其他常用 .minecraft 目录</span>
+                  <span className="text-[11px] text-[#2F1F17]">自动发现官方启动器与标准安装路径下的游戏版本</span>
+                </div>
+                <input
+                  type="checkbox"
+                  data-testid="scan-system-dirs-toggle"
+                  checked={settings.scanSystemDirs}
+                  onChange={(e) => setSettings((s) => ({ ...s, scanSystemDirs: e.target.checked }))}
+                  className="h-4.5 w-4.5 accent-[#2E5E1C] cursor-pointer"
+                />
+              </label>
+
+              {/* 用户自定义额外扫描目录 */}
+              <div className="flex flex-col gap-2 pt-2 border-t border-dirt-40/30">
+                <span className="font-bold text-[#1F1F1F] text-[12px]">自定义 .minecraft 目录扫描列表：</span>
+                <div className="flex gap-2 items-center">
+                  <input
+                    type="text"
+                    value={newCustomDir}
+                    onChange={(e) => setNewCustomDir(e.target.value)}
+                    placeholder="输入其他 .minecraft 文件夹绝对路径..."
+                    className="flex-1 bg-white px-3 py-1.5 ring-1 ring-inset ring-[#A8988A] focus:ring-2 focus:ring-[#2E5E1C] text-[12px] text-[#1F1F1F] font-mono outline-none"
+                  />
+                  <button
+                    type="button"
+                    data-testid="add-custom-dir-button"
+                    onClick={handleAddCustomDir}
+                    className="px-3 py-1.5 bg-[#2E5E1C] hover:bg-[#3D7726] text-white text-[11px] font-bold ring-1 ring-[#1B3B11] cursor-pointer"
+                  >
+                    添加目录
+                  </button>
+                </div>
+
+                {settings.customDirs && settings.customDirs.length > 0 && (
+                  <div className="flex flex-col gap-1.5 mt-1">
+                    {settings.customDirs.map((d) => (
+                      <div
+                        key={d}
+                        className="flex items-center justify-between px-3 py-1.5 bg-stone-10 ring-1 ring-border-hard/30 text-xs font-mono"
+                      >
+                        <span className="truncate flex-1 text-[#1F1F1F]">{d}</span>
+                        <button
+                          type="button"
+                          onClick={() => handleRemoveCustomDir(d)}
+                          className="ml-2 text-red-600 hover:text-red-800 font-bold cursor-pointer text-xs"
+                        >
+                          删除
+                        </button>
+                      </div>
+                    ))}
+                  </div>
+                )}
+              </div>
             </section>
 
             {/* 游戏窗口分辨率与显示模式 */}
@@ -850,7 +931,7 @@ export const SettingsView: React.FC = () => {
             {/* 并发下载线程数与自动重试 */}
             <section className="p-5 bg-white/70 ring-2 ring-inset ring-surface-slot flex flex-col gap-4 shadow-sm">
               <div className="flex justify-between items-center pb-2 border-b-2 border-dirt-40/40">
-                <h3 className="font-bold text-[#1F1F1F] text-[14px]">并发下载线程数 (Download Concurrency)</h3>
+                <span className="font-bold text-[#1F1F1F] text-[14px]">并发下载线程数 (Download Concurrency)</span>
                 <span className="font-bold text-white px-2.5 py-1 bg-[#2E5E1C] ring-1 ring-[#1B3B11] text-[12px]">
                   {settings.downloadThreads} 线程
                 </span>
@@ -870,27 +951,11 @@ export const SettingsView: React.FC = () => {
                 <span className="text-[11px] text-[#2F1F17] font-mono font-bold">64 线程</span>
               </div>
 
-              <div className="flex items-center gap-2 pt-1">
-                <span className="text-[12px] font-bold text-[#1F1F1F]">档位预设:</span>
-                {[8, 16, 32, 64].map((th) => (
-                  <button
-                    key={th}
-                    type="button"
-                    onClick={() => setSettings((s) => ({ ...s, downloadThreads: th }))}
-                    className={`px-3 py-1 text-[11px] ring-1 ring-border-hard cursor-pointer font-medium transition-colors ${
-                      settings.downloadThreads === th
-                        ? 'bg-[#2E5E1C] text-white font-bold ring-2 ring-[#1B3B11]'
-                        : 'bg-white text-[#1F1F1F] hover:bg-dirt-20/60'
-                    }`}
-                  >
-                    {th} 线程 {th === 32 ? '(标准)' : ''}
-                  </button>
-                ))}
-              </div>
-
-              {/* 下载自动重试 */}
-              <label className="mt-2 flex items-center justify-between cursor-pointer py-2.5 px-3 bg-dirt-10 ring-1 ring-border-hard/30">
-                <span className="font-bold text-[#1F1F1F] text-[13px]">下载校验失败时自动重试 (最多 5 次)</span>
+              <label className="flex items-center justify-between cursor-pointer py-2 px-3 bg-dirt-10 ring-1 ring-border-hard/30 mt-2">
+                <div className="flex flex-col">
+                  <span className="font-bold text-[#1F1F1F] text-[13px]">下载校验失败时自动重试</span>
+                  <span className="text-[11px] text-[#2F1F17]">针对资源包与依赖库损坏自动切换备用镜像</span>
+                </div>
                 <input
                   type="checkbox"
                   checked={settings.autoRetry}
@@ -903,7 +968,7 @@ export const SettingsView: React.FC = () => {
         )}
 
         {/* ========================================== */}
-        {/* 4. 启动器偏好与关于系统 */}
+        {/* 4. 启动器偏好与 UI 配置 */}
         {/* ========================================== */}
         {activeCategory === 'launcher' && (
           <div
@@ -912,99 +977,93 @@ export const SettingsView: React.FC = () => {
             aria-labelledby="settings-tab-launcher"
             className="flex flex-col gap-6 transition-all duration-200 ease-out animate-tabpanel-in"
           >
-            {/* 启动与运行动作 */}
+            {/* 启动后行为 */}
             <section className="p-5 bg-white/70 ring-2 ring-inset ring-surface-slot flex flex-col gap-4 shadow-sm">
-              <div className="pb-2 border-b-2 border-dirt-40/40">
-                <h3 className="font-bold text-[#1F1F1F] text-[14px]">启动与运行动作</h3>
+              <div className="flex items-center justify-between pb-2 border-b-2 border-dirt-40/40">
+                <h3 className="font-bold text-[#1F1F1F] text-[14px]">启动游戏后启动器行为</h3>
+                <span className="text-[11px] text-[#2F1F17]">进程生命周期偏好</span>
               </div>
 
-              {/* 启动后行为 */}
-              <div className="flex flex-col gap-2">
-                <span className="font-bold text-[#1F1F1F] text-[12px]">启动游戏后的启动器动作：</span>
-                <div className="grid grid-cols-3 gap-3">
-                  {(
-                    [
-                      { id: 'keep', label: '保持启动器打开', desc: '不执行任何动作' },
-                      { id: 'minimize', label: '启动游戏后自动最小化', desc: '缩小到托盘/任务栏' },
-                      { id: 'close', label: '完全退出启动器', desc: '节省后台系统资源' },
-                    ] as const
-                  ).map((beh) => {
-                    const isSelected = settings.afterLaunch === beh.id;
-                    return (
-                      <button
-                        key={beh.id}
-                        type="button"
-                        onClick={() =>
-                          setSettings((s) => ({
-                            ...s,
-                            afterLaunch: beh.id as AfterLaunchBehavior,
-                            autoClose: beh.id === 'minimize',
-                          }))
-                        }
-                        className={`p-3 ring-2 cursor-pointer text-left transition-all flex flex-col gap-1 ${
-                          isSelected
-                            ? 'bg-stone-10 ring-[#2E5E1C] shadow-[2px_2px_0_0_#2E5E1C] font-bold text-[#1F1F1F]'
-                            : 'bg-stone-10/70 ring-surface-slot/30 hover:bg-stone-10 hover:ring-surface-slot/60 text-[#1F1F1F]'
-                        }`}
-                      >
-                        <span className="text-[13px] font-bold">{beh.label}</span>
-                        <span className="text-[11px] text-[#2F1F17]">{beh.desc}</span>
-                      </button>
-                    );
-                  })}
-                </div>
-              </div>
-
-              {/* 首页苦力怕展台动效 */}
-              <label className="flex items-center justify-between cursor-pointer py-2.5 px-3 bg-dirt-10 ring-1 ring-border-hard/30">
-                <div className="flex flex-col">
-                  <span className="font-bold text-[#1F1F1F] text-[13px]">首页苦力怕展台与 Pretext 排版动态动效</span>
-                  <span className="text-[11px] text-[#2F1F17]">包含 8-bit 漫步、光标注视与物理爆炸粒子系统</span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={settings.creeperEffects}
-                  onChange={(e) => setSettings((s) => ({ ...s, creeperEffects: e.target.checked }))}
-                  className="h-4.5 w-4.5 accent-[#2E5E1C] cursor-pointer"
-                />
-              </label>
-
-              {/* 音效与彩蛋开关 */}
-              <label className="flex items-center justify-between cursor-pointer py-2.5 px-3 bg-dirt-10 ring-1 ring-border-hard/30">
-                <div className="flex flex-col">
-                  <span className="font-bold text-[#1F1F1F] text-[13px]">像素音效与彩蛋交互反馈</span>
-                  <span className="text-[11px] text-[#2F1F17]">点击展台彩蛋或切换视图时的 8-bit 提示音效</span>
-                </div>
-                <input
-                  type="checkbox"
-                  checked={settings.soundEffects}
-                  onChange={(e) => setSettings((s) => ({ ...s, soundEffects: e.target.checked }))}
-                  className="h-4.5 w-4.5 accent-[#2E5E1C] cursor-pointer"
-                />
-              </label>
-
-              {/* UI 缩放 */}
-              <div className="flex items-center justify-between py-2.5 px-3 bg-dirt-10/50 ring-1 ring-border-hard/20">
-                <span className="font-bold text-[#1F1F1F] text-[13px]">界面缩放比例 (UI Scale)</span>
-                <span className="text-[12px] text-[#1F1F1F] font-bold bg-white px-3 py-1 ring-1 ring-border-hard">
-                  点对点像素 (100%)
-                </span>
+              <div className="grid grid-cols-3 gap-3">
+                {(
+                  [
+                    {
+                      id: 'keep',
+                      name: '保持窗口开启',
+                      desc: '启动后保留启动器主窗口',
+                    },
+                    {
+                      id: 'minimize',
+                      name: '启动游戏后自动最小化',
+                      desc: '进入游戏后最小化到托盘/任务栏',
+                    },
+                    {
+                      id: 'close',
+                      name: '启动游戏后完全退出',
+                      desc: '启动成功后自动关闭启动器进程',
+                    },
+                  ] as const
+                ).map((item) => {
+                  const isSelected = settings.afterLaunch === item.id;
+                  return (
+                    <label
+                      key={item.id}
+                      className={`p-3.5 ring-2 cursor-pointer transition-all flex flex-col gap-1.5 ${
+                        isSelected
+                          ? 'bg-stone-10 ring-[#2E5E1C] shadow-[2px_2px_0_0_#2E5E1C]'
+                          : 'bg-stone-10/70 ring-surface-slot/30 hover:bg-stone-10 hover:ring-surface-slot/60'
+                      }`}
+                    >
+                      <div className="flex items-center gap-2">
+                        <input
+                          type="radio"
+                          name="after-launch"
+                          checked={isSelected}
+                          onChange={() => setSettings((s) => ({ ...s, afterLaunch: item.id }))}
+                          className="accent-[#2E5E1C] cursor-pointer h-4 w-4"
+                        />
+                        <span className="font-bold text-[#1F1F1F] text-[13px]">{item.name}</span>
+                      </div>
+                      <span className="text-[11px] text-[#2F1F17] pl-6">{item.desc}</span>
+                    </label>
+                  );
+                })}
               </div>
             </section>
 
-            {/* 关于 AtomLauncher */}
-            <section className="p-5 bg-dirt-20/20 ring-2 ring-inset ring-surface-slot flex flex-col gap-3 text-[12px] text-[#2F1F17]">
-              <div className="text-[#1F1F1F] font-bold text-[14px] pb-2 border-b-2 border-dirt-40/30">
-                关于 AtomLauncher
+            {/* 视觉展台与音效 */}
+            <section className="p-5 bg-white/70 ring-2 ring-inset ring-surface-slot flex flex-col gap-4 shadow-sm">
+              <div className="flex items-center justify-between pb-2 border-b-2 border-dirt-40/40">
+                <h3 className="font-bold text-[#1F1F1F] text-[14px]">视觉展台与音效动效</h3>
+                <span className="text-[11px] text-[#2F1F17]">交互反馈偏好</span>
               </div>
-              <div className="grid grid-cols-2 gap-3 text-[12px] text-[#1F1F1F]">
-                <div>客户端版本：<span className="font-mono text-[#1F1F1F] font-bold">0.1.0-alpha (Dev)</span></div>
-                <div>核心架构：<span className="text-[#1F1F1F] font-bold">Tauri 2.0 + React 19 + Wasm</span></div>
-                <div>文字排版引擎：<span className="text-[#1F1F1F] font-bold">@chenglou/pretext (零 DOM 重排)</span></div>
-                <div>插件虚拟机：<span className="text-[#1F1F1F] font-bold">Wasmtime JIT Compiler</span></div>
-              </div>
-              <div className="text-[11px] text-[#2F1F17] pt-1 leading-relaxed">
-                AtomLauncher 是一款采用极致像素美学、Rust 高性能底层与 WebAssembly 插件生态构建的现代 Minecraft 启动器。
+
+              <div className="flex flex-col gap-2.5">
+                <label className="flex items-center justify-between cursor-pointer py-2 px-3 bg-dirt-10 ring-1 ring-border-hard/30">
+                  <div className="flex flex-col">
+                    <span className="font-bold text-[#1F1F1F] text-[13px]">首页苦力怕展台与 Pretext 排版动态动效</span>
+                    <span className="text-[11px] text-[#2F1F17]">关闭可进一步降低空闲 GPU 与 Canvas 渲染负载</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={settings.creeperEffects}
+                    onChange={(e) => setSettings((s) => ({ ...s, creeperEffects: e.target.checked }))}
+                    className="h-4.5 w-4.5 accent-[#2E5E1C] cursor-pointer"
+                  />
+                </label>
+
+                <label className="flex items-center justify-between cursor-pointer py-2 px-3 bg-dirt-10 ring-1 ring-border-hard/30">
+                  <div className="flex flex-col">
+                    <span className="font-bold text-[#1F1F1F] text-[13px]">界面交互像素音效</span>
+                    <span className="text-[11px] text-[#2F1F17]">按钮点击与状态切换触发 Minecraft 原生音效反馈</span>
+                  </div>
+                  <input
+                    type="checkbox"
+                    checked={settings.soundEffects}
+                    onChange={(e) => setSettings((s) => ({ ...s, soundEffects: e.target.checked }))}
+                    className="h-4.5 w-4.5 accent-[#2E5E1C] cursor-pointer"
+                  />
+                </label>
               </div>
             </section>
           </div>
@@ -1013,5 +1072,3 @@ export const SettingsView: React.FC = () => {
     </div>
   );
 };
-
-export default SettingsView;
