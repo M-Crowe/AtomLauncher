@@ -82,6 +82,20 @@ pub struct StartedPayload {
     pub version_id: String,
 }
 
+#[derive(Debug, Clone, Serialize, Deserialize)]
+#[serde(rename_all = "camelCase")]
+pub struct JavaRuntimeInfo {
+    pub id: String,
+    pub name: String,
+    pub path: String,
+    pub version: String,
+    pub major_version: u32,
+    pub arch: String,
+    pub vendor: String,
+    pub recommended_for: String,
+    pub is_auto_detected: bool,
+}
+
 // Global active processes tracker
 static RUNNING_PROCESSES: OnceLock<Arc<Mutex<HashMap<u32, Child>>>> = OnceLock::new();
 
@@ -327,6 +341,244 @@ pub fn scan_minecraft_versions(options: ScanOptions) -> Result<Vec<MinecraftVers
     Ok(all_versions)
 }
 
+fn inspect_java_executable(exe_path: &Path) -> Option<JavaRuntimeInfo> {
+    if !exe_path.exists() {
+        return None;
+    }
+
+    let output = Command::new(exe_path).arg("-version").output().ok()?;
+    let text = String::from_utf8_lossy(&output.stderr).to_string() + &String::from_utf8_lossy(&output.stdout);
+    if text.is_empty() {
+        return None;
+    }
+
+    let mut version = "Unknown".to_string();
+    let mut major_version = 17u32;
+
+    if let Some(start_idx) = text.find("version \"") {
+        let after = &text[start_idx + 9..];
+        if let Some(end_idx) = after.find('"') {
+            version = after[..end_idx].to_string();
+        }
+    } else if let Some(start_idx) = text.find("version ") {
+        let after = &text[start_idx + 8..];
+        let token = after.split_whitespace().next().unwrap_or("");
+        version = token.trim_matches('"').to_string();
+    }
+
+    if version.starts_with("1.8") {
+        major_version = 8;
+    } else if let Some(first) = version.split('.').next() {
+        if let Ok(m) = first.split('-').next().unwrap_or(first).parse::<u32>() {
+            major_version = m;
+        }
+    }
+
+    let arch = if text.contains("64-Bit") || text.contains("x86_64") || text.contains("amd64") || text.contains("aarch64") {
+        "x64".to_string()
+    } else {
+        "x86".to_string()
+    };
+
+    let vendor = if text.contains("Temurin") || text.contains("Adoptium") {
+        "Eclipse Adoptium".to_string()
+    } else if text.contains("Microsoft") {
+        "Microsoft".to_string()
+    } else if text.contains("Oracle") || text.contains("Java(TM)") {
+        "Oracle".to_string()
+    } else if text.contains("Zulu") {
+        "Azul Zulu".to_string()
+    } else if text.contains("Corretto") {
+        "Amazon Corretto".to_string()
+    } else if text.contains("Liberica") || text.contains("BellSoft") {
+        "BellSoft Liberica".to_string()
+    } else if text.contains("Semeru") || text.contains("IBM") {
+        "IBM Semeru".to_string()
+    } else {
+        "OpenJDK".to_string()
+    };
+
+    let recommended_for = if major_version >= 25 {
+        "26.3+ 快照及未来版本".to_string()
+    } else if major_version >= 21 {
+        "1.20.5+ 及 1.21+ 现代版本".to_string()
+    } else if major_version >= 17 {
+        "1.18 ~ 1.20.4 中期版本".to_string()
+    } else if major_version == 16 {
+        "1.17 版本".to_string()
+    } else if major_version == 8 {
+        "1.12.2 及更早经典版本".to_string()
+    } else {
+        "Minecraft 通用运行环境".to_string()
+    };
+
+    let path_to_save = if cfg!(windows) {
+        let parent = exe_path.parent().unwrap_or(exe_path);
+        let javaw = parent.join("javaw.exe");
+        if javaw.exists() {
+            javaw.to_string_lossy().to_string()
+        } else {
+            exe_path.to_string_lossy().to_string()
+        }
+    } else {
+        exe_path.to_string_lossy().to_string()
+    };
+
+    let id = format!("java-{}-{}", major_version, path_to_save.replace(['\\', '/', ':', ' '], "_"));
+    let name = format!("{vendor} JDK {major_version} ({version})");
+
+    Some(JavaRuntimeInfo {
+        id,
+        name,
+        path: path_to_save,
+        version,
+        major_version,
+        arch,
+        vendor,
+        recommended_for,
+        is_auto_detected: true,
+    })
+}
+
+#[tauri::command]
+pub fn detect_java_environments() -> Result<Vec<JavaRuntimeInfo>, String> {
+    let mut detected = Vec::new();
+    let mut candidate_paths: Vec<PathBuf> = Vec::new();
+
+    #[cfg(target_os = "windows")]
+    {
+        if let Ok(output) = Command::new("where").args(["javaw"]).output() {
+            let out_str = String::from_utf8_lossy(&output.stdout);
+            for line in out_str.lines() {
+                let p = PathBuf::from(line.trim());
+                if p.exists() {
+                    candidate_paths.push(p);
+                }
+            }
+        }
+        if let Ok(output) = Command::new("where").args(["java"]).output() {
+            let out_str = String::from_utf8_lossy(&output.stdout);
+            for line in out_str.lines() {
+                let p = PathBuf::from(line.trim());
+                if p.exists() {
+                    candidate_paths.push(p);
+                }
+            }
+        }
+
+        let roots = ["C:\\Program Files", "D:\\Program Files", "C:\\Program Files (x86)", "D:\\Program Files (x86)"];
+        let sub_folders = ["Eclipse Adoptium", "Java", "Microsoft", "BellSoft", "Zulu", "Amazon Corretto", "Semeru"];
+        let mut search_dirs = Vec::new();
+        for root in roots {
+            for sub in sub_folders {
+                let base = PathBuf::from(root).join(sub);
+                if base.exists() && base.is_dir() {
+                    search_dirs.push(base);
+                }
+            }
+        }
+
+        if let Ok(user_profile) = std::env::var("USERPROFILE") {
+            let user_jdks = PathBuf::from(&user_profile).join(".jdks");
+            if user_jdks.exists() {
+                search_dirs.push(user_jdks);
+            }
+        }
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            let mc_runtime = PathBuf::from(&appdata).join(".minecraft").join("runtime");
+            if mc_runtime.exists() {
+                search_dirs.push(mc_runtime);
+            }
+        }
+
+        for dir in search_dirs {
+            if let Ok(entries) = fs::read_dir(&dir) {
+                for entry in entries.flatten() {
+                    let path = entry.path();
+                    if path.is_dir() {
+                        let javaw = path.join("bin").join("javaw.exe");
+                        if javaw.exists() {
+                            candidate_paths.push(javaw);
+                        }
+                        let java_exe = path.join("bin").join("java.exe");
+                        if java_exe.exists() {
+                            candidate_paths.push(java_exe);
+                        }
+                        if let Ok(sub_entries) = fs::read_dir(&path) {
+                            for sub_entry in sub_entries.flatten() {
+                                let sub_path = sub_entry.path();
+                                if sub_path.is_dir() {
+                                    let sub_javaw = sub_path.join("bin").join("javaw.exe");
+                                    if sub_javaw.exists() {
+                                        candidate_paths.push(sub_javaw);
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "macos")]
+    {
+        let mac_dir = PathBuf::from("/Library/Java/JavaVirtualMachines");
+        if mac_dir.exists() {
+            if let Ok(entries) = fs::read_dir(&mac_dir) {
+                for entry in entries.flatten() {
+                    let j = entry.path().join("Contents/Home/bin/java");
+                    if j.exists() {
+                        candidate_paths.push(j);
+                    }
+                }
+            }
+        }
+    }
+
+    #[cfg(target_os = "linux")]
+    {
+        let jvm_dir = PathBuf::from("/usr/lib/jvm");
+        if jvm_dir.exists() {
+            if let Ok(entries) = fs::read_dir(&jvm_dir) {
+                for entry in entries.flatten() {
+                    let j = entry.path().join("bin/java");
+                    if j.exists() {
+                        candidate_paths.push(j);
+                    }
+                }
+            }
+        }
+    }
+
+    for env_var in ["JAVA_HOME", "JDK_HOME"] {
+        if let Ok(val) = std::env::var(env_var) {
+            let p = PathBuf::from(val).join("bin").join(if cfg!(windows) { "javaw.exe" } else { "java" });
+            if p.exists() {
+                candidate_paths.push(p);
+            }
+        }
+    }
+
+    let mut visited_paths = std::collections::HashSet::new();
+    for p in candidate_paths {
+        let canonical = p.to_string_lossy().to_lowercase();
+        if visited_paths.contains(&canonical) {
+            continue;
+        }
+        visited_paths.insert(canonical);
+
+        if let Some(info) = inspect_java_executable(&p) {
+            if !detected.iter().any(|d: &JavaRuntimeInfo| d.path.eq_ignore_ascii_case(&info.path)) {
+                detected.push(info);
+            }
+        }
+    }
+
+    detected.sort_by(|a, b| b.major_version.cmp(&a.major_version));
+    Ok(detected)
+}
+
 fn parse_log_level(line: &str) -> &'static str {
     let upper = line.to_uppercase();
     if upper.contains("/ERROR")
@@ -375,7 +627,27 @@ pub fn launch_minecraft(
     app: AppHandle,
     options: LaunchOptions,
 ) -> Result<LaunchResult, String> {
-    let java_path = options.java_path.trim();
+    let mut java_path = options.java_path.trim().to_string();
+
+    // 智能版本匹配与自适应提升（例如 26.x / snapshot 需 Java 25，1.21 需 Java 21）
+    if let Ok(runtimes) = detect_java_environments() {
+        if options.version_id.starts_with("26.") || options.version_id.contains("snapshot") {
+            if let Some(j25) = runtimes.iter().find(|r| r.major_version >= 25) {
+                java_path = j25.path.clone();
+            } else if let Some(j21) = runtimes.iter().find(|r| r.major_version >= 21) {
+                java_path = j21.path.clone();
+            }
+        } else if options.version_id.starts_with("1.21") || options.version_id.starts_with("1.20.5") || options.version_id.starts_with("1.20.6") {
+            if let Some(j21) = runtimes.iter().find(|r| r.major_version >= 21) {
+                java_path = j21.path.clone();
+            }
+        } else if java_path == "javaw.exe" || java_path == "java.exe" || java_path.is_empty() {
+            if let Some(first) = runtimes.first() {
+                java_path = first.path.clone();
+            }
+        }
+    }
+
     if java_path.is_empty() {
         return Err("Java 路径不能为空，请在设置中配置有效 Java 运行时".to_string());
     }

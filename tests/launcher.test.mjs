@@ -121,6 +121,7 @@ test('R1 & R3. App integration: dual launch button, log status indicator, instan
 test('Rust backend launcher module source code checks', () => {
   const launcherRs = readFileSync(resolve('src-tauri/src/launcher.rs'), 'utf-8');
   assert.ok(launcherRs.includes('pub fn scan_minecraft_versions'), 'Rust exports scan_minecraft_versions command');
+  assert.ok(launcherRs.includes('pub fn detect_java_environments'), 'Rust exports detect_java_environments command');
   assert.ok(launcherRs.includes('pub fn launch_minecraft'), 'Rust exports launch_minecraft command');
   assert.ok(launcherRs.includes('pub fn kill_minecraft_instance'), 'Rust exports kill_minecraft_instance command');
   assert.ok(launcherRs.includes('minecraft-log'), 'Rust emits minecraft-log event');
@@ -130,6 +131,7 @@ test('Rust backend launcher module source code checks', () => {
   const libRs = readFileSync(resolve('src-tauri/src/lib.rs'), 'utf-8');
   assert.ok(libRs.includes('pub mod launcher;'), 'lib.rs imports launcher module');
   assert.ok(libRs.includes('scan_minecraft_versions'), 'lib.rs registers scan_minecraft_versions');
+  assert.ok(libRs.includes('detect_java_environments'), 'lib.rs registers detect_java_environments');
   assert.ok(libRs.includes('launch_minecraft'), 'lib.rs registers launch_minecraft');
   assert.ok(libRs.includes('kill_minecraft_instance'), 'lib.rs registers kill_minecraft_instance');
 });
