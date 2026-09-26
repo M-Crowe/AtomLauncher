@@ -13,6 +13,7 @@
   --font-fusion: "FusionPixelFont", sans-serif;
 
   /* Color Palette */
+
   --color-diamond-40: rgba(74, 237, 217, 1);
 
   --color-dirt-10: rgba(245, 235, 225, 1);
@@ -101,4 +102,27 @@
     animation-iteration-count: 1 !important;
     transition-duration: 0.01ms !important;
   }
+}
+
+/* 全局隐藏原生滚动条，保持鼠标滚轮与手势平滑滚动 */
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.no-scrollbar {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
 }

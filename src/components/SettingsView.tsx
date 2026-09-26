@@ -138,20 +138,17 @@ export const SettingsSidebar: React.FC = () => {
 
   return (
     <aside className="w-full h-full flex flex-col justify-between select-none font-fusion bg-surface-card">
-      {/* 顶部标题 */}
-      <div className="flex items-center justify-between p-4 border-b-2 border-surface-slot bg-dirt-10 shrink-0">
-        <div>
-          <h2 className="text-[15px] font-bold text-[#1F1F1F] leading-tight">设置分类</h2>
-          <p className="text-[11px] text-[#2F1F17] leading-tight">参数与运行环境配置</p>
-        </div>
+      {/* 顶部标题 (与最近实例列表结构与边框完全对齐，保证顶部边框线严丝合缝) */}
+      <div className="flex items-end justify-start p-5 ring-2 ring-inset ring-surface-slot bg-surface-card shrink-0">
+        <h2 className="text-[16px] font-fusion text-btn-primary-active">设置选项</h2>
       </div>
 
-      {/* 分类列表 */}
+      {/* 分类列表 (隐藏原生滚动条，保持滚轮与手势平滑滚动) */}
       <div
         role="tablist"
         aria-orientation="vertical"
         aria-label="设置分类列表"
-        className="flex-1 flex flex-col p-3 gap-2.5 overflow-y-auto"
+        className="flex-1 flex flex-col p-3 gap-2.5 overflow-y-auto no-scrollbar"
       >
         {SETTINGS_CATEGORIES.map((cat, index) => {
           const isSelected = activeCategory === cat.id;
@@ -192,7 +189,7 @@ export const SettingsSidebar: React.FC = () => {
         })}
       </div>
 
-      {/* 底部保存与恢复操作栏 */}
+      {/* 底部实时状态与恢复默认栏 */}
       <div className="p-3 border-t-2 border-surface-slot bg-dirt-10 flex items-center justify-between gap-2 shrink-0">
         <button
           type="button"
@@ -209,7 +206,7 @@ export const SettingsSidebar: React.FC = () => {
           title="保存设置"
           aria-label="保存设置"
         >
-          {saveFeedback ? '[ 已保存 ]' : '[ 保存配置 ]'}
+          {saveFeedback ? '[ 已实时保存 ]' : '[ 保存配置 ]'}
         </button>
       </div>
     </aside>
@@ -364,8 +361,8 @@ export const SettingsView: React.FC = () => {
         </div>
       )}
 
-      {/* 表单主滚动区 (100% 展开，无嵌套 Tab 栏，充足呼吸感) */}
-      <div className="flex-1 overflow-y-auto p-6 flex flex-col gap-6 text-[13px] text-[#1F1F1F]">
+      {/* 表单主滚动区 (100% 展开，无嵌套 Tab 栏，隐藏滚动条，充足呼吸感) */}
+      <div className="flex-1 overflow-y-auto no-scrollbar p-6 flex flex-col gap-6 text-[13px] text-[#1F1F1F]">
         {/* ========================================== */}
         {/* 1. Java 运行环境与内存配置 */}
         {/* ========================================== */}
