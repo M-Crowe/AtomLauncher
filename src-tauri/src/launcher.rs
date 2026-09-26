@@ -738,7 +738,7 @@ pub fn launch_minecraft(
             .join(cp_separator)
     };
 
-    let mut cmd = Command::new(java_path);
+    let mut cmd = Command::new(&java_path);
     cmd.current_dir(&work_dir);
 
     // JVM Memory
