@@ -3,6 +3,23 @@ use std::collections::HashSet;
 use std::fs;
 use std::path::{Path, PathBuf};
 
+/// 启动器特性标志（用于条件规则评估）
+#[derive(Debug, Clone, Default)]
+pub struct LauncherFeatureFlags {
+    pub is_demo_user: bool,
+    pub has_custom_resolution: bool,
+    pub is_quick_play_singleplayer: bool,
+    pub is_quick_play_multiplayer: bool,
+    pub is_quick_play_realms: bool,
+}
+
+/// 单个条件参数条目
+#[derive(Debug, Clone)]
+pub struct ArgumentEntry {
+    pub values: Vec<String>,
+    pub rules: Vec<serde_json::Value>,
+}
+
 /// 游戏完整性检查报告（供启动前自检与后续版本下载器共用）
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
@@ -41,63 +58,74 @@ pub struct ResolvedVersionMeta {
     pub java_major_version: u32,
     pub assets_index: String,
     pub classpath_entries: Vec<PathBuf>,
-    pub jvm_args_template: Vec<String>,
-    pub game_args_template: Vec<String>,
+    pub jvm_args_entries: Vec<ArgumentEntry>,
+    pub game_args_entries: Vec<ArgumentEntry>,
     pub loader_type: String, // "vanilla" | "forge" | "neoforge" | "fabric" | "quilt" | "other"
 }
 
 /// 规则计算器（解析 Mojang OS 与 Feature 规则）
-fn evaluate_rules(rules: &[serde_json::Value]) -> bool {
-    let mut allowed = false;
-    let current_os = if cfg!(target_os = "windows") {
-        "windows"
-    } else if cfg!(target_os = "macos") {
-        "osx"
-    } else {
-        "linux"
-    };
+fn evaluate_single_rule(rule: &serde_json::Value, features: &LauncherFeatureFlags) -> Option<bool> {
+    let action = rule.get("action").and_then(|a| a.as_str()).unwrap_or("allow");
+    let is_allow = action == "allow";
 
-    let current_arch = if cfg!(target_arch = "x86_64") {
-        "x86_64"
-    } else if cfg!(target_arch = "aarch64") {
-        "arm64"
-    } else {
-        "x86"
-    };
+    // 1. Check OS
+    if let Some(os) = rule.get("os") {
+        let current_os = if cfg!(target_os = "windows") {
+            "windows"
+        } else if cfg!(target_os = "macos") {
+            "osx"
+        } else {
+            "linux"
+        };
 
-    for rule in rules {
-        let action = rule.get("action").and_then(|a| a.as_str()).unwrap_or("allow");
-        let is_allow = action == "allow";
+        let current_arch = if cfg!(target_arch = "x86_64") {
+            "x86_64"
+        } else if cfg!(target_arch = "aarch64") {
+            "arm64"
+        } else {
+            "x86"
+        };
 
-        let mut applies = true;
-
-        if let Some(os) = rule.get("os") {
-            if let Some(name) = os.get("name").and_then(|n| n.as_str()) {
-                if name != current_os {
-                    applies = false;
-                }
-            }
-            if let Some(arch) = os.get("arch").and_then(|a| a.as_str()) {
-                if arch != current_arch {
-                    applies = false;
-                }
+        if let Some(name) = os.get("name").and_then(|n| n.as_str()) {
+            if name != current_os {
+                return None; // OS 不匹配，规则不适用
             }
         }
-
-        // Features flag check
-        if let Some(features) = rule.get("features") {
-            if let Some(is_demo) = features.get("is_demo_user").and_then(|d| d.as_bool()) {
-                if is_demo {
-                    applies = false;
-                }
+        if let Some(arch) = os.get("arch").and_then(|a| a.as_str()) {
+            if arch != current_arch {
+                return None;
             }
-        }
-
-        if applies {
-            allowed = is_allow;
         }
     }
 
+    // 2. Check Features (精准匹配特性开关：demo, custom_resolution, quick_play)
+    if let Some(f_obj) = rule.get("features").and_then(|f| f.as_object()) {
+        for (k, v) in f_obj {
+            let expected = v.as_bool().unwrap_or(false);
+            let actual = match k.as_str() {
+                "is_demo_user" => features.is_demo_user,
+                "has_custom_resolution" => features.has_custom_resolution,
+                "is_quick_play_singleplayer" => features.is_quick_play_singleplayer,
+                "is_quick_play_multiplayer" => features.is_quick_play_multiplayer,
+                "is_quick_play_realms" => features.is_quick_play_realms,
+                _ => false,
+            };
+            if expected != actual {
+                return None; // 特性不匹配，规则不适用！
+            }
+        }
+    }
+
+    Some(is_allow)
+}
+
+pub fn evaluate_rules(rules: &[serde_json::Value], features: &LauncherFeatureFlags) -> bool {
+    let mut allowed = false;
+    for rule in rules {
+        if let Some(is_allow) = evaluate_single_rule(rule, features) {
+            allowed = is_allow;
+        }
+    }
     if rules.is_empty() {
         true
     } else {
@@ -141,8 +169,8 @@ pub fn resolve_version_meta(
     let mut loader_type = "vanilla".to_string();
 
     let mut collected_libs: Vec<serde_json::Value> = Vec::new();
-    let mut collected_jvm_args: Vec<String> = Vec::new();
-    let mut collected_game_args: Vec<String> = Vec::new();
+    let mut collected_jvm_entries: Vec<ArgumentEntry> = Vec::new();
+    let mut collected_game_entries: Vec<ArgumentEntry> = Vec::new();
     let mut version_jars: Vec<PathBuf> = Vec::new();
 
     let versions_dir = game_dir.join("versions");
@@ -160,7 +188,7 @@ pub fn resolve_version_meta(
 
         let content = fs::read_to_string(&json_path)
             .map_err(|e| format!("读取版本 JSON 失败 [{:?}]: {e}", json_path))?;
-        let v: serde_json::Value = serde_json::from_str(&content)
+        let v: serde_json::Value = serde_json::from_str::<serde_json::Value>(&content)
             .map_err(|e| format!("解析版本 JSON 失败 [{:?}]: {e}", json_path))?;
 
         // 识别主类（优先使用最上层派生版本的主类，例如 Forge BootstrapLauncher）
@@ -216,25 +244,29 @@ pub fn resolve_version_meta(
             }
         }
 
-        // 收集 Arguments
+        // 收集 Arguments 条目（保留 rules 供后续根据特性动态计算）
         if let Some(args) = v.get("arguments") {
             if let Some(jvm) = args.get("jvm").and_then(|x| x.as_array()) {
                 for item in jvm {
                     if let Some(s) = item.as_str() {
-                        collected_jvm_args.push(s.to_string());
+                        collected_jvm_entries.push(ArgumentEntry {
+                            values: vec![s.to_string()],
+                            rules: Vec::new(),
+                        });
                     } else if let Some(obj) = item.as_object() {
-                        if let Some(rules) = obj.get("rules").and_then(|r| r.as_array()) {
-                            if evaluate_rules(rules) {
-                                if let Some(v_str) = obj.get("value").and_then(|v| v.as_str()) {
-                                    collected_jvm_args.push(v_str.to_string());
-                                } else if let Some(v_arr) = obj.get("value").and_then(|v| v.as_array()) {
-                                    for sub in v_arr {
-                                        if let Some(s) = sub.as_str() {
-                                            collected_jvm_args.push(s.to_string());
-                                        }
-                                    }
+                        let rules = obj.get("rules").and_then(|r| r.as_array()).cloned().unwrap_or_default();
+                        let mut values = Vec::new();
+                        if let Some(v_str) = obj.get("value").and_then(|v| v.as_str()) {
+                            values.push(v_str.to_string());
+                        } else if let Some(v_arr) = obj.get("value").and_then(|v| v.as_array()) {
+                            for sub in v_arr {
+                                if let Some(s) = sub.as_str() {
+                                    values.push(s.to_string());
                                 }
                             }
+                        }
+                        if !values.is_empty() {
+                            collected_jvm_entries.push(ArgumentEntry { values, rules });
                         }
                     }
                 }
@@ -243,27 +275,34 @@ pub fn resolve_version_meta(
             if let Some(game) = args.get("game").and_then(|x| x.as_array()) {
                 for item in game {
                     if let Some(s) = item.as_str() {
-                        collected_game_args.push(s.to_string());
+                        collected_game_entries.push(ArgumentEntry {
+                            values: vec![s.to_string()],
+                            rules: Vec::new(),
+                        });
                     } else if let Some(obj) = item.as_object() {
-                        if let Some(rules) = obj.get("rules").and_then(|r| r.as_array()) {
-                            if evaluate_rules(rules) {
-                                if let Some(v_str) = obj.get("value").and_then(|v| v.as_str()) {
-                                    collected_game_args.push(v_str.to_string());
-                                } else if let Some(v_arr) = obj.get("value").and_then(|v| v.as_array()) {
-                                    for sub in v_arr {
-                                        if let Some(s) = sub.as_str() {
-                                            collected_game_args.push(s.to_string());
-                                        }
-                                    }
+                        let rules = obj.get("rules").and_then(|r| r.as_array()).cloned().unwrap_or_default();
+                        let mut values = Vec::new();
+                        if let Some(v_str) = obj.get("value").and_then(|v| v.as_str()) {
+                            values.push(v_str.to_string());
+                        } else if let Some(v_arr) = obj.get("value").and_then(|v| v.as_array()) {
+                            for sub in v_arr {
+                                if let Some(s) = sub.as_str() {
+                                    values.push(s.to_string());
                                 }
                             }
+                        }
+                        if !values.is_empty() {
+                            collected_game_entries.push(ArgumentEntry { values, rules });
                         }
                     }
                 }
             }
         } else if let Some(legacy_args) = v.get("minecraftArguments").and_then(|x| x.as_str()) {
             for part in legacy_args.split_whitespace() {
-                collected_game_args.push(part.to_string());
+                collected_game_entries.push(ArgumentEntry {
+                    values: vec![part.to_string()],
+                    rules: Vec::new(),
+                });
             }
         }
 
@@ -275,10 +314,12 @@ pub fn resolve_version_meta(
     let mut classpath_entries = Vec::new();
     let mut seen_cp = HashSet::new();
 
+    let default_features = LauncherFeatureFlags::default();
+
     // 解析 Libraries 构建真实 Classpath
     for lib in collected_libs {
         if let Some(rules) = lib.get("rules").and_then(|r| r.as_array()) {
-            if !evaluate_rules(rules) {
+            if !evaluate_rules(rules, &default_features) {
                 continue;
             }
         }
@@ -337,8 +378,8 @@ pub fn resolve_version_meta(
         java_major_version: final_java_major,
         assets_index,
         classpath_entries,
-        jvm_args_template: collected_jvm_args,
-        game_args_template: collected_game_args,
+        jvm_args_entries: collected_jvm_entries,
+        game_args_entries: collected_game_entries,
         loader_type,
     })
 }
@@ -392,7 +433,7 @@ pub fn check_game_integrity(
     }
 }
 
-/// 构建包含标准 JVM Module Unlocks 的启动参数列表
+/// 构建启动参数列表（精准计算 Module Unlocks 与 Game Features）
 pub fn build_launch_arguments(
     meta: &ResolvedVersionMeta,
     game_dir: &Path,
@@ -451,69 +492,96 @@ pub fn build_launch_arguments(
     jvm_args.push("-Dminecraft.launcher.brand=AtomLauncher".to_string());
     jvm_args.push("-Dminecraft.launcher.version=1.0.0".to_string());
 
-    // 3. 解析版本自带的 JVM 参数模板（过滤掉 -cp / -classpath / ${classpath}，统一交由启动器规范传入）
-    let mut idx = 0;
-    let raw_jvm = &meta.jvm_args_template;
-    while idx < raw_jvm.len() {
-        let arg = &raw_jvm[idx];
-        if arg == "-cp" || arg == "-classpath" || arg == "${classpath}" {
+    // 3. 构建当前运行特性的 FeatureFlags
+    let has_custom_res = window_width.is_some() || window_height.is_some();
+    let runtime_features = LauncherFeatureFlags {
+        is_demo_user: false,
+        has_custom_resolution: has_custom_res,
+        is_quick_play_singleplayer: false,
+        is_quick_play_multiplayer: false,
+        is_quick_play_realms: false,
+    };
+
+    // 4. 解析版本自带的 JVM 参数模板（过滤掉 -cp / -classpath / ${classpath}，评估 rules）
+    for entry in &meta.jvm_args_entries {
+        if !evaluate_rules(&entry.rules, &runtime_features) {
+            continue;
+        }
+
+        let mut idx = 0;
+        while idx < entry.values.len() {
+            let arg = &entry.values[idx];
+            if arg == "-cp" || arg == "-classpath" || arg == "${classpath}" {
+                idx += 1;
+                continue;
+            }
+
+            if arg == "--add-opens" && idx + 1 < entry.values.len() {
+                let next = &entry.values[idx + 1];
+                let flag = format!("--add-opens={next}");
+                if !jvm_args.contains(&flag) {
+                    jvm_args.push(flag);
+                }
+                idx += 2;
+                continue;
+            }
+
+            if arg == "--add-exports" && idx + 1 < entry.values.len() {
+                let next = &entry.values[idx + 1];
+                let flag = format!("--add-exports={next}");
+                if !jvm_args.contains(&flag) {
+                    jvm_args.push(flag);
+                }
+                idx += 2;
+                continue;
+            }
+
+            let mut replaced = arg.clone();
+            replaced = replaced.replace("${natives_directory}", &natives_dir.to_string_lossy());
+            replaced = replaced.replace("${launcher_name}", "AtomLauncher");
+            replaced = replaced.replace("${launcher_version}", "1.0.0");
+
+            if !replaced.is_empty() && !jvm_args.contains(&replaced) && !replaced.contains("${classpath}") {
+                jvm_args.push(replaced);
+            }
             idx += 1;
-            continue;
         }
-
-        if arg == "--add-opens" && idx + 1 < raw_jvm.len() {
-            let next = &raw_jvm[idx + 1];
-            let flag = format!("--add-opens={next}");
-            if !jvm_args.contains(&flag) {
-                jvm_args.push(flag);
-            }
-            idx += 2;
-            continue;
-        }
-
-        if arg == "--add-exports" && idx + 1 < raw_jvm.len() {
-            let next = &raw_jvm[idx + 1];
-            let flag = format!("--add-exports={next}");
-            if !jvm_args.contains(&flag) {
-                jvm_args.push(flag);
-            }
-            idx += 2;
-            continue;
-        }
-
-        let mut replaced = arg.clone();
-        replaced = replaced.replace("${natives_directory}", &natives_dir.to_string_lossy());
-        replaced = replaced.replace("${launcher_name}", "AtomLauncher");
-        replaced = replaced.replace("${launcher_version}", "1.0.0");
-        
-        if !replaced.is_empty() && !jvm_args.contains(&replaced) && !replaced.contains("${classpath}") {
-            jvm_args.push(replaced);
-        }
-        idx += 1;
     }
 
-    // 4. 解析 Game 参数
-    if !meta.game_args_template.is_empty() {
-        for arg in &meta.game_args_template {
-            let mut replaced = arg.clone();
-            replaced = replaced.replace("${auth_player_name}", username);
-            replaced = replaced.replace("${version_name}", &meta.id);
-            replaced = replaced.replace("${game_directory}", &work_dir.to_string_lossy());
-            replaced = replaced.replace("${assets_root}", &assets_dir.to_string_lossy());
-            replaced = replaced.replace("${assets_index_name}", &meta.assets_index);
-            replaced = replaced.replace("${auth_uuid}", uuid);
-            replaced = replaced.replace("${auth_access_token}", access_token);
-            replaced = replaced.replace("${user_type}", "mojang");
-            replaced = replaced.replace("${version_type}", "AtomLauncher");
-            replaced = replaced.replace("${resolution_width}", &window_width.unwrap_or(854).to_string());
-            replaced = replaced.replace("${resolution_height}", &window_height.unwrap_or(480).to_string());
+    // 5. 解析 Game 参数（根据 FeatureFlags 过滤掉未启用的 Quick Play / Demo 规则，替换模板变量）
+    let width_str = window_width.unwrap_or(854).to_string();
+    let height_str = window_height.unwrap_or(480).to_string();
 
-            if !replaced.is_empty() {
-                game_args.push(replaced);
+    if !meta.game_args_entries.is_empty() {
+        for entry in &meta.game_args_entries {
+            if !evaluate_rules(&entry.rules, &runtime_features) {
+                continue; // 彻底排除未启用的 Quick Play / Demo 选项！
+            }
+
+            for val in &entry.values {
+                let mut replaced = val.clone();
+                replaced = replaced.replace("${auth_player_name}", username);
+                replaced = replaced.replace("${version_name}", &meta.id);
+                replaced = replaced.replace("${game_directory}", &work_dir.to_string_lossy());
+                replaced = replaced.replace("${assets_root}", &assets_dir.to_string_lossy());
+                replaced = replaced.replace("${assets_index_name}", &meta.assets_index);
+                replaced = replaced.replace("${auth_uuid}", uuid);
+                replaced = replaced.replace("${auth_access_token}", access_token);
+                replaced = replaced.replace("${user_type}", "mojang");
+                replaced = replaced.replace("${version_type}", "AtomLauncher");
+                replaced = replaced.replace("${clientid}", uuid);
+                replaced = replaced.replace("${auth_xuid}", "0");
+                replaced = replaced.replace("${resolution_width}", &width_str);
+                replaced = replaced.replace("${resolution_height}", &height_str);
+
+                // 只有完全替换了模板变量的参数才加入（防止未识别的 ${...} 混入）
+                if !replaced.is_empty() && !replaced.starts_with("${") {
+                    game_args.push(replaced);
+                }
             }
         }
     } else {
-        // Fallback 标准游戏参数
+        // Fallback 标准经典游戏参数
         game_args.push("--username".to_string());
         game_args.push(username.to_string());
         game_args.push("--version".to_string());
