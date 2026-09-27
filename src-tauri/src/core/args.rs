@@ -81,54 +81,256 @@ pub fn build_launch_arguments(
     let cp_separator = if cfg!(windows) { ";" } else { ":" };
     let lib_dir = game_dir.join("libraries");
 
+fn replace_jvm_macro(
+    val: &str,
+    natives_dir: &str,
+    lib_dir: &str,
+    work_dir: &str,
+    version_name: &str,
+    cp_separator: &str,
+) -> String {
+    let mut replaced = val.to_string();
+    replaced = replaced.replace("${natives_directory}", natives_dir);
+    replaced = replaced.replace("${launcher_name}", "AtomLauncher");
+    replaced = replaced.replace("${launcher_version}", "1.0.0");
+    replaced = replaced.replace("${library_directory}", lib_dir);
+    replaced = replaced.replace("${classpath_separator}", cp_separator);
+    replaced = replaced.replace("${game_directory}", work_dir);
+    replaced = replaced.replace("${version_name}", version_name);
+    replaced = replaced.replace("${primary_jar_name}", &format!("{version_name}.jar"));
+    replaced
+}
+
     // 4. 解析版本自带的 JVM 参数模板（过滤掉 standalone -cp / -classpath / ${classpath}，评估 rules，替换宏变量）
+    let natives_dir_str = natives_dir.to_string_lossy();
+    let lib_dir_str = lib_dir.to_string_lossy();
+    let work_dir_str = work_dir.to_string_lossy();
+
+    let mut raw_jvm_tokens: Vec<String> = Vec::new();
     for entry in &meta.jvm_args_entries {
-        if !evaluate_rules(&entry.rules, &runtime_features) {
+        if evaluate_rules(&entry.rules, &runtime_features) {
+            for val in &entry.values {
+                raw_jvm_tokens.push(val.clone());
+            }
+        }
+    }
+
+    let mut idx = 0;
+    while idx < raw_jvm_tokens.len() {
+        let tok = &raw_jvm_tokens[idx];
+
+        // 4.1 Classpath 跳过（由 process.rs 独立拼接 -cp / @argfile）
+        if tok == "-cp" || tok == "-classpath" {
+            if idx + 1 < raw_jvm_tokens.len()
+                && (raw_jvm_tokens[idx + 1] == "${classpath}"
+                    || raw_jvm_tokens[idx + 1].contains("${classpath}"))
+            {
+                idx += 2;
+            } else {
+                idx += 1;
+            }
+            continue;
+        }
+        if tok == "${classpath}" {
+            idx += 1;
             continue;
         }
 
-        let mut idx = 0;
-        while idx < entry.values.len() {
-            let arg = &entry.values[idx];
-            if arg == "-cp" || arg == "-classpath" || arg == "${classpath}" {
+        // 4.2 --add-opens (原子化合并为 --add-opens=...，防止拆分成两个参数被 Java 误识别为主类)
+        if tok == "--add-opens" {
+            if idx + 1 < raw_jvm_tokens.len() && !raw_jvm_tokens[idx + 1].starts_with('-') {
+                let target = replace_jvm_macro(
+                    &raw_jvm_tokens[idx + 1],
+                    &natives_dir_str,
+                    &lib_dir_str,
+                    &work_dir_str,
+                    &meta.id,
+                    cp_separator,
+                );
+                let flag = format!("--add-opens={target}");
+                if !jvm_args.contains(&flag) {
+                    jvm_args.push(flag);
+                }
+                idx += 2;
+            } else {
                 idx += 1;
-                continue;
             }
-
-            if arg == "--add-opens" && idx + 1 < entry.values.len() {
-                let next = &entry.values[idx + 1];
-                let flag = format!("--add-opens={next}");
-                if !jvm_args.contains(&flag) {
-                    jvm_args.push(flag);
-                }
-                idx += 2;
-                continue;
-            }
-
-            if arg == "--add-exports" && idx + 1 < entry.values.len() {
-                let next = &entry.values[idx + 1];
-                let flag = format!("--add-exports={next}");
-                if !jvm_args.contains(&flag) {
-                    jvm_args.push(flag);
-                }
-                idx += 2;
-                continue;
-            }
-
-            let mut replaced = arg.clone();
-            replaced = replaced.replace("${natives_directory}", &natives_dir.to_string_lossy());
-            replaced = replaced.replace("${launcher_name}", "AtomLauncher");
-            replaced = replaced.replace("${launcher_version}", "1.0.0");
-            replaced = replaced.replace("${library_directory}", &lib_dir.to_string_lossy());
-            replaced = replaced.replace("${classpath_separator}", cp_separator);
-            replaced = replaced.replace("${game_directory}", &work_dir.to_string_lossy());
-            replaced = replaced.replace("${version_name}", &meta.id);
-
-            if !replaced.is_empty() && !jvm_args.contains(&replaced) && !replaced.starts_with("${") {
-                jvm_args.push(replaced);
+            continue;
+        }
+        if tok.starts_with("--add-opens=") {
+            let flag = replace_jvm_macro(
+                tok,
+                &natives_dir_str,
+                &lib_dir_str,
+                &work_dir_str,
+                &meta.id,
+                cp_separator,
+            );
+            if !jvm_args.contains(&flag) {
+                jvm_args.push(flag);
             }
             idx += 1;
+            continue;
         }
+
+        // 4.3 --add-exports (原子化合并为 --add-exports=...)
+        if tok == "--add-exports" {
+            if idx + 1 < raw_jvm_tokens.len() && !raw_jvm_tokens[idx + 1].starts_with('-') {
+                let target = replace_jvm_macro(
+                    &raw_jvm_tokens[idx + 1],
+                    &natives_dir_str,
+                    &lib_dir_str,
+                    &work_dir_str,
+                    &meta.id,
+                    cp_separator,
+                );
+                let flag = format!("--add-exports={target}");
+                if !jvm_args.contains(&flag) {
+                    jvm_args.push(flag);
+                }
+                idx += 2;
+            } else {
+                idx += 1;
+            }
+            continue;
+        }
+        if tok.starts_with("--add-exports=") {
+            let flag = replace_jvm_macro(
+                tok,
+                &natives_dir_str,
+                &lib_dir_str,
+                &work_dir_str,
+                &meta.id,
+                cp_separator,
+            );
+            if !jvm_args.contains(&flag) {
+                jvm_args.push(flag);
+            }
+            idx += 1;
+            continue;
+        }
+
+        // 4.4 --add-modules (原子化合并为 --add-modules=...)
+        if tok == "--add-modules" {
+            if idx + 1 < raw_jvm_tokens.len() && !raw_jvm_tokens[idx + 1].starts_with('-') {
+                let target = replace_jvm_macro(
+                    &raw_jvm_tokens[idx + 1],
+                    &natives_dir_str,
+                    &lib_dir_str,
+                    &work_dir_str,
+                    &meta.id,
+                    cp_separator,
+                );
+                let flag = format!("--add-modules={target}");
+                if !jvm_args.contains(&flag) {
+                    jvm_args.push(flag);
+                }
+                idx += 2;
+            } else {
+                idx += 1;
+            }
+            continue;
+        }
+        if tok.starts_with("--add-modules=") {
+            let flag = replace_jvm_macro(
+                tok,
+                &natives_dir_str,
+                &lib_dir_str,
+                &work_dir_str,
+                &meta.id,
+                cp_separator,
+            );
+            if !jvm_args.contains(&flag) {
+                jvm_args.push(flag);
+            }
+            idx += 1;
+            continue;
+        }
+
+        // 4.5 --add-reads (原子化合并为 --add-reads=...)
+        if tok == "--add-reads" {
+            if idx + 1 < raw_jvm_tokens.len() && !raw_jvm_tokens[idx + 1].starts_with('-') {
+                let target = replace_jvm_macro(
+                    &raw_jvm_tokens[idx + 1],
+                    &natives_dir_str,
+                    &lib_dir_str,
+                    &work_dir_str,
+                    &meta.id,
+                    cp_separator,
+                );
+                let flag = format!("--add-reads={target}");
+                if !jvm_args.contains(&flag) {
+                    jvm_args.push(flag);
+                }
+                idx += 2;
+            } else {
+                idx += 1;
+            }
+            continue;
+        }
+        if tok.starts_with("--add-reads=") {
+            let flag = replace_jvm_macro(
+                tok,
+                &natives_dir_str,
+                &lib_dir_str,
+                &work_dir_str,
+                &meta.id,
+                cp_separator,
+            );
+            if !jvm_args.contains(&flag) {
+                jvm_args.push(flag);
+            }
+            idx += 1;
+            continue;
+        }
+
+        // 4.6 -p / --module-path
+        if tok == "-p" || tok == "--module-path" {
+            if idx + 1 < raw_jvm_tokens.len() && !raw_jvm_tokens[idx + 1].starts_with('-') {
+                let target = replace_jvm_macro(
+                    &raw_jvm_tokens[idx + 1],
+                    &natives_dir_str,
+                    &lib_dir_str,
+                    &work_dir_str,
+                    &meta.id,
+                    cp_separator,
+                );
+                jvm_args.push("-p".to_string());
+                jvm_args.push(target);
+                idx += 2;
+            } else {
+                idx += 1;
+            }
+            continue;
+        }
+        if tok.starts_with("--module-path=") {
+            let flag = replace_jvm_macro(
+                tok,
+                &natives_dir_str,
+                &lib_dir_str,
+                &work_dir_str,
+                &meta.id,
+                cp_separator,
+            );
+            jvm_args.push(flag);
+            idx += 1;
+            continue;
+        }
+
+        // 4.7 通用 JVM 参数（-D..., -XX..., -Xss... 等）
+        let replaced = replace_jvm_macro(
+            tok,
+            &natives_dir_str,
+            &lib_dir_str,
+            &work_dir_str,
+            &meta.id,
+            cp_separator,
+        );
+
+        if !replaced.is_empty() && !replaced.starts_with("${") && !jvm_args.contains(&replaced) {
+            jvm_args.push(replaced);
+        }
+        idx += 1;
     }
 
     // 5. 解析 Game 参数（根据 FeatureFlags 过滤掉未启用的 Quick Play / Demo 规则，替换模板变量）
@@ -329,5 +531,92 @@ mod tests {
         );
 
         assert!(!game.contains(&"--customFlag".to_string()));
+    }
+
+    #[test]
+    fn test_forge_multi_add_opens_and_exports_handling() {
+        let meta = ResolvedVersionMeta {
+            id: "MC Eternal 2".to_string(),
+            main_class: "cpw.mods.bootstraplauncher.BootstrapLauncher".to_string(),
+            java_major_version: 17,
+            assets_index: "5".to_string(),
+            classpath_entries: vec![],
+            jvm_args_entries: vec![
+                ArgumentEntry {
+                    values: vec!["-DlibraryDirectory=${library_directory}".to_string()],
+                    rules: vec![],
+                },
+                ArgumentEntry {
+                    values: vec![
+                        "-p".to_string(),
+                        "${library_directory}/cpw/mods/bootstraplauncher.jar".to_string(),
+                    ],
+                    rules: vec![],
+                },
+                ArgumentEntry {
+                    values: vec!["--add-modules".to_string(), "ALL-MODULE-PATH".to_string()],
+                    rules: vec![],
+                },
+                ArgumentEntry {
+                    values: vec![
+                        "--add-opens".to_string(),
+                        "java.base/java.util.jar=cpw.mods.securejarhandler".to_string(),
+                    ],
+                    rules: vec![],
+                },
+                ArgumentEntry {
+                    values: vec![
+                        "--add-opens".to_string(),
+                        "java.base/java.lang.invoke=cpw.mods.securejarhandler".to_string(),
+                    ],
+                    rules: vec![],
+                },
+                ArgumentEntry {
+                    values: vec![
+                        "--add-exports".to_string(),
+                        "java.base/sun.security.util=cpw.mods.securejarhandler".to_string(),
+                    ],
+                    rules: vec![],
+                },
+            ],
+            game_args_entries: vec![],
+            loader_type: "forge".to_string(),
+        };
+
+        let game_dir = std::path::PathBuf::from("D:/MineCraft/.minecraft");
+        let work_dir = std::path::PathBuf::from("D:/MineCraft/.minecraft/versions/MC Eternal 2");
+        let (jvm, _game) = build_launch_arguments(
+            &meta,
+            &game_dir,
+            &work_dir,
+            meta.java_major_version,
+            "Player",
+            "00000000-0000-0000-0000-000000000000",
+            "dummy_token",
+            "mojang",
+            "0",
+            None,
+            None,
+            false,
+        );
+
+        // 1. Both --add-opens MUST be formatted as single-token --add-opens=...
+        assert!(jvm.contains(&"--add-opens=java.base/java.util.jar=cpw.mods.securejarhandler".to_string()));
+        assert!(jvm.contains(&"--add-opens=java.base/java.lang.invoke=cpw.mods.securejarhandler".to_string()));
+        assert!(jvm.contains(&"--add-exports=java.base/sun.security.util=cpw.mods.securejarhandler".to_string()));
+        assert!(jvm.contains(&"--add-modules=ALL-MODULE-PATH".to_string()));
+
+        // 2. NO naked target without prefix must exist!
+        assert!(!jvm.contains(&"java.base/java.lang.invoke=cpw.mods.securejarhandler".to_string()));
+        assert!(!jvm.contains(&"--add-opens".to_string()));
+        assert!(!jvm.contains(&"--add-exports".to_string()));
+        assert!(!jvm.contains(&"--add-modules".to_string()));
+
+        // 3. -p and module path must be paired
+        let p_idx = jvm.iter().position(|x| x == "-p").expect("Must contain -p");
+        assert_eq!(
+            jvm[p_idx + 1],
+            format!("{}/cpw/mods/bootstraplauncher.jar", game_dir.join("libraries").to_string_lossy())
+        );
     }
 }
