@@ -251,6 +251,9 @@ export function getEffectiveJavaPath(settings: LauncherSettings, runtimes: JavaR
   if (settings.useCustomJava && settings.customJavaPath && settings.customJavaPath.trim()) {
     return settings.customJavaPath.trim();
   }
+  if (settings.selectedJavaId === 'auto') {
+    return 'auto';
+  }
   const matched = runtimes.find((r) => r.id === settings.selectedJavaId);
   if (matched?.path) {
     return matched.path;

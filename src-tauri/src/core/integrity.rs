@@ -13,7 +13,18 @@ pub fn check_game_integrity(
 
     let version_jar = game_dir.join("versions").join(version_id).join(format!("{version_id}.jar"));
     if !version_jar.exists() {
-        missing_version_jar = true;
+        let mut found_parent_jar = false;
+        if let Ok(ref meta) = meta_res {
+            if meta.classpath_entries.iter().any(|p| {
+                p.extension().map_or(false, |ext| ext == "jar")
+                    && p.to_string_lossy().replace('\\', "/").contains("/versions/")
+            }) {
+                found_parent_jar = true;
+            }
+        }
+        if !found_parent_jar {
+            missing_version_jar = true;
+        }
     }
 
     if let Ok(meta) = meta_res {

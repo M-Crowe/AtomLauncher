@@ -79,6 +79,30 @@ pub fn evaluate_rules(rules: &[ArgumentRule], features: &LauncherFeatureFlags) -
             }
         }
 
+        // 8. Quick Play Path Matching
+        if let Some(qp_path) = rule.is_quick_play_path {
+            if qp_path != features.is_quick_play_path {
+                matches = false;
+            }
+        }
+
+        // 9. Generic Features Map Matching (Mojang standard)
+        for (feat_name, &expected_val) in &rule.features {
+            let actual_val = match feat_name.as_str() {
+                "is_demo_user" => features.is_demo_user,
+                "has_custom_resolution" => features.has_custom_resolution,
+                "is_quick_play_singleplayer" => features.is_quick_play_singleplayer,
+                "is_quick_play_multiplayer" => features.is_quick_play_multiplayer,
+                "is_quick_play_realms" => features.is_quick_play_realms,
+                "is_quick_play_path" => features.is_quick_play_path,
+                _ => false, // 未在启动器中显式启用的未知/新特性，默认不匹配
+            };
+            if expected_val != actual_val {
+                matches = false;
+                break;
+            }
+        }
+
         if matches {
             if rule.action == "allow" {
                 result = true;

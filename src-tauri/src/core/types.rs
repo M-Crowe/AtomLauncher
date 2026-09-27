@@ -41,6 +41,8 @@ pub struct ArgumentRule {
     pub is_quick_play_singleplayer: Option<bool>,
     pub is_quick_play_multiplayer: Option<bool>,
     pub is_quick_play_realms: Option<bool>,
+    pub is_quick_play_path: Option<bool>,
+    pub features: std::collections::HashMap<String, bool>,
 }
 
 #[derive(Debug, Clone)]
@@ -68,4 +70,5 @@ pub struct LauncherFeatureFlags {
     pub is_quick_play_singleplayer: bool,
     pub is_quick_play_multiplayer: bool,
     pub is_quick_play_realms: bool,
+    pub is_quick_play_path: bool,
 }

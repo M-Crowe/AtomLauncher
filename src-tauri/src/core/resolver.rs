@@ -12,12 +12,30 @@ pub fn parse_rules_from_json(rule_objs: &[serde_json::Value]) -> Vec<ArgumentRul
         let os_version = os_obj.and_then(|x| x.get("version")).and_then(|x| x.as_str()).map(|s| s.to_string());
         let os_arch = os_obj.and_then(|x| x.get("arch")).and_then(|x| x.as_str()).map(|s| s.to_string());
 
-        let features = r.get("features");
-        let is_demo_user = features.and_then(|x| x.get("is_demo_user")).and_then(|x| x.as_bool());
-        let has_custom_resolution = features.and_then(|x| x.get("has_custom_resolution")).and_then(|x| x.as_bool());
-        let is_quick_play_singleplayer = features.and_then(|x| x.get("is_quick_play_singleplayer")).and_then(|x| x.as_bool());
-        let is_quick_play_multiplayer = features.and_then(|x| x.get("is_quick_play_multiplayer")).and_then(|x| x.as_bool());
-        let is_quick_play_realms = features.and_then(|x| x.get("is_quick_play_realms")).and_then(|x| x.as_bool());
+        let mut feat_map = std::collections::HashMap::new();
+        let mut is_demo_user = None;
+        let mut has_custom_resolution = None;
+        let mut is_quick_play_singleplayer = None;
+        let mut is_quick_play_multiplayer = None;
+        let mut is_quick_play_realms = None;
+        let mut is_quick_play_path = None;
+
+        if let Some(features) = r.get("features").and_then(|x| x.as_object()) {
+            for (k, val) in features {
+                if let Some(b) = val.as_bool() {
+                    feat_map.insert(k.clone(), b);
+                    match k.as_str() {
+                        "is_demo_user" => is_demo_user = Some(b),
+                        "has_custom_resolution" => has_custom_resolution = Some(b),
+                        "is_quick_play_singleplayer" => is_quick_play_singleplayer = Some(b),
+                        "is_quick_play_multiplayer" => is_quick_play_multiplayer = Some(b),
+                        "is_quick_play_realms" => is_quick_play_realms = Some(b),
+                        "is_quick_play_path" => is_quick_play_path = Some(b),
+                        _ => {}
+                    }
+                }
+            }
+        }
 
         rules.push(ArgumentRule {
             action,
@@ -29,6 +47,8 @@ pub fn parse_rules_from_json(rule_objs: &[serde_json::Value]) -> Vec<ArgumentRul
             is_quick_play_singleplayer,
             is_quick_play_multiplayer,
             is_quick_play_realms,
+            is_quick_play_path,
+            features: feat_map,
         });
     }
     rules
@@ -71,6 +91,8 @@ pub fn resolve_version_meta(
     let mut version_jars: Vec<PathBuf> = Vec::new();
 
     let versions_dir = game_dir.join("versions");
+
+    let mut has_minecraft_args = false;
 
     while !current_id.is_empty() {
         if visited_ids.contains(&current_id) {
@@ -188,13 +210,16 @@ pub fn resolve_version_meta(
             }
         }
 
-        // 收集旧版 minecraftArguments
-        if let Some(mc_args) = v.get("minecraftArguments").and_then(|x| x.as_str()) {
-            for token in mc_args.split_whitespace() {
-                collected_game_entries.push(ArgumentEntry {
-                    values: vec![token.to_string()],
-                    rules: Vec::new(),
-                });
+        // 收集旧版 minecraftArguments（子版本必须完全覆盖父版本，防止参数重复叠加）
+        if !has_minecraft_args {
+            if let Some(mc_args) = v.get("minecraftArguments").and_then(|x| x.as_str()) {
+                has_minecraft_args = true;
+                for token in mc_args.split_whitespace() {
+                    collected_game_entries.push(ArgumentEntry {
+                        values: vec![token.to_string()],
+                        rules: Vec::new(),
+                    });
+                }
             }
         }
 
@@ -232,22 +257,10 @@ pub fn resolve_version_meta(
             }
         }
 
-        // 方式 B: 从 Maven 坐标 name 获取（如 "com.mojang:authlib:1.5.25"）
+        // 方式 B: 从 Maven 坐标 name 获取（如 "com.mojang:authlib:1.5.25" 或带 @jar / @zip 扩展名）
         if lib_rel_path.is_none() {
             if let Some(name) = lib.get("name").and_then(|x| x.as_str()) {
-                let parts: Vec<&str> = name.split(':').collect();
-                if parts.len() >= 3 {
-                    let group = parts[0].replace('.', "/");
-                    let artifact = parts[1];
-                    let version = parts[2];
-                    let classifier = parts.get(3);
-                    let filename = if let Some(c) = classifier {
-                        format!("{artifact}-{version}-{c}.jar")
-                    } else {
-                        format!("{artifact}-{version}.jar")
-                    };
-                    lib_rel_path = Some(format!("{group}/{artifact}/{version}/{filename}"));
-                }
+                lib_rel_path = parse_maven_coordinate(name);
             }
         }
 
@@ -284,4 +297,184 @@ pub fn resolve_version_meta(
         game_args_entries: collected_game_entries,
         loader_type,
     })
+}
+
+pub fn parse_maven_coordinate(name: &str) -> Option<String> {
+    let parts: Vec<&str> = name.split(':').collect();
+    if parts.len() < 3 {
+        return None;
+    }
+    let group = parts[0].replace('.', "/");
+    let artifact = parts[1];
+    let mut version = parts[2];
+    let mut ext = "jar";
+    if let Some((v, e)) = version.split_once('@') {
+        version = v;
+        ext = e;
+    }
+    let mut classifier = parts.get(3).copied();
+    if let Some(c) = classifier {
+        if let Some((clean_c, e)) = c.split_once('@') {
+            classifier = Some(clean_c);
+            ext = e;
+        }
+    }
+    let filename = if let Some(c) = classifier {
+        format!("{artifact}-{version}-{c}.{ext}")
+    } else {
+        format!("{artifact}-{version}.{ext}")
+    };
+    Some(format!("{group}/{artifact}/{version}/{filename}"))
+}
+
+pub fn extract_natives(
+    game_dir: &Path,
+    work_dir: &Path,
+    version_id: &str,
+) -> Result<(), String> {
+    let natives_dir = work_dir.join("natives");
+    let _ = fs::create_dir_all(&natives_dir);
+    let libraries_root = game_dir.join("libraries");
+
+    let versions_dir = game_dir.join("versions");
+    let mut current_id = version_id.to_string();
+    let mut visited = HashSet::new();
+
+    while !current_id.is_empty() {
+        if visited.contains(&current_id) {
+            break;
+        }
+        visited.insert(current_id.clone());
+
+        let json_path = versions_dir.join(&current_id).join(format!("{current_id}.json"));
+        if !json_path.exists() {
+            break;
+        }
+
+        let content = match fs::read_to_string(&json_path) {
+            Ok(c) => c,
+            Err(_) => break,
+        };
+        let v: serde_json::Value = match serde_json::from_str(&content) {
+            Ok(val) => val,
+            Err(_) => break,
+        };
+
+        if let Some(libs) = v.get("libraries").and_then(|x| x.as_array()) {
+            for lib in libs {
+                let is_native = lib.get("natives").is_some()
+                    || lib.get("downloads").and_then(|d| d.get("classifiers")).is_some()
+                    || lib.get("name").and_then(|n| n.as_str()).map_or(false, |n| n.contains("-natives-"));
+
+                if !is_native {
+                    continue;
+                }
+
+                let mut rel_path: Option<String> = None;
+                if let Some(downloads) = lib.get("downloads") {
+                    if let Some(classifiers) = downloads.get("classifiers") {
+                        #[cfg(target_os = "windows")]
+                        let os_keys = ["natives-windows", "natives-windows-64", "natives-windows-32"];
+                        #[cfg(target_os = "macos")]
+                        let os_keys = ["natives-osx", "natives-macos", "natives-macos-arm64"];
+                        #[cfg(target_os = "linux")]
+                        let os_keys = ["natives-linux"];
+
+                        for k in os_keys {
+                            if let Some(art) = classifiers.get(k) {
+                                if let Some(p) = art.get("path").and_then(|x| x.as_str()) {
+                                    rel_path = Some(p.to_string());
+                                    break;
+                                }
+                            }
+                        }
+                    }
+                    if rel_path.is_none() {
+                        if let Some(art) = downloads.get("artifact") {
+                            if let Some(p) = art.get("path").and_then(|x| x.as_str()) {
+                                rel_path = Some(p.to_string());
+                            }
+                        }
+                    }
+                }
+
+                if rel_path.is_none() {
+                    if let Some(name) = lib.get("name").and_then(|x| x.as_str()) {
+                        rel_path = parse_maven_coordinate(name);
+                    }
+                }
+
+                if let Some(rel) = rel_path {
+                    let full_path = libraries_root.join(rel.replace('/', "\\"));
+                    if full_path.exists() {
+                        if let Ok(file) = fs::File::open(&full_path) {
+                            if let Ok(mut archive) = zip::ZipArchive::new(file) {
+                                for i in 0..archive.len() {
+                                    if let Ok(mut zip_file) = archive.by_index(i) {
+                                        let name = zip_file.name().to_string();
+                                        if name.starts_with("META-INF") || name.ends_with('/') {
+                                            continue;
+                                        }
+                                        #[cfg(windows)]
+                                        let matches_ext = name.ends_with(".dll");
+                                        #[cfg(target_os = "macos")]
+                                        let matches_ext = name.ends_with(".dylib");
+                                        #[cfg(target_os = "linux")]
+                                        let matches_ext = name.ends_with(".so");
+
+                                        if matches_ext {
+                                            let filename = Path::new(&name).file_name().unwrap_or(std::ffi::OsStr::new(&name));
+                                            let out_path = natives_dir.join(filename);
+                                            if !out_path.exists() {
+                                                if let Ok(mut outfile) = fs::File::create(&out_path) {
+                                                    let _ = std::io::copy(&mut zip_file, &mut outfile);
+                                                }
+                                            }
+                                        }
+                                    }
+                                }
+                            }
+                        }
+                    }
+                }
+            }
+        }
+
+        if let Some(parent) = v.get("inheritsFrom").and_then(|x| x.as_str()) {
+            current_id = parent.to_string();
+        } else {
+            break;
+        }
+    }
+
+    Ok(())
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+
+    #[test]
+    fn test_parse_maven_coordinate_standard() {
+        let p = parse_maven_coordinate("org.lwjgl:lwjgl:3.3.3").unwrap();
+        assert_eq!(p, "org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3.jar");
+    }
+
+    #[test]
+    fn test_parse_maven_coordinate_with_classifier() {
+        let p = parse_maven_coordinate("org.lwjgl:lwjgl:3.3.3:natives-windows").unwrap();
+        assert_eq!(p, "org/lwjgl/lwjgl/3.3.3/lwjgl-3.3.3-natives-windows.jar");
+    }
+
+    #[test]
+    fn test_parse_maven_coordinate_with_ext() {
+        let p = parse_maven_coordinate("net.minecraftforge:forge:1.20.1-47.2.0@jar").unwrap();
+        assert_eq!(
+            p,
+            "net/minecraftforge/forge/1.20.1-47.2.0/forge-1.20.1-47.2.0.jar"
+        );
+
+        let p2 = parse_maven_coordinate("com.example:test:1.0:client@zip").unwrap();
+        assert_eq!(p2, "com/example/test/1.0/test-1.0-client.zip");
+    }
 }

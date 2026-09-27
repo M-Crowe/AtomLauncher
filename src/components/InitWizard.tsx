@@ -70,12 +70,14 @@ export const InitWizard: React.FC<InitWizardProps> = ({ onComplete }) => {
       try {
         const runtimes = await scanSystemJavaRuntimes();
         if (!isCancelled && Array.isArray(runtimes) && runtimes.length > 0) {
-          setJavaRuntimes(runtimes);
-          // Pick best Java: prioritize 21, then 17, or top element
+          const sorted = [...runtimes].sort((a, b) => b.majorVersion - a.majorVersion);
+          setJavaRuntimes(sorted);
+          // Pick best Java: prioritize 25, 21, then 17, or top element
           const bestJava =
-            runtimes.find((r) => r.majorVersion === 21) ||
-            runtimes.find((r) => r.majorVersion === 17) ||
-            runtimes[0];
+            sorted.find((r) => r.majorVersion === 25) ||
+            sorted.find((r) => r.majorVersion === 21) ||
+            sorted.find((r) => r.majorVersion === 17) ||
+            sorted[0];
           setSelectedJavaId(bestJava.id);
         }
       } catch (err) {
@@ -171,10 +173,12 @@ export const InitWizard: React.FC<InitWizardProps> = ({ onComplete }) => {
       const activeRuntime = javaRuntimes.find((r) => r.id === selectedJavaId) || javaRuntimes[0];
       const effectiveJavaPath = useCustomJava ? (customJavaPath.trim() || null) : (activeRuntime?.path || null);
 
+      const effectiveJavaId = useCustomJava ? '' : (selectedJavaId || 'auto');
+
       await saveInitConfiguration({
         atom_dir: effectiveAtomDir,
         game_dir: effectiveGameDir,
-        selected_java_id: useCustomJava ? null : selectedJavaId,
+        selected_java_id: effectiveJavaId,
         java_path: effectiveJavaPath,
         custom_java_path: useCustomJava ? customJavaPath.trim() : null,
         offline_username: effectiveOfflineName,
@@ -186,7 +190,7 @@ export const InitWizard: React.FC<InitWizardProps> = ({ onComplete }) => {
       saveLauncherSettings({
         ...current,
         gameDir: effectiveGameDir,
-        selectedJavaId: useCustomJava ? '' : selectedJavaId,
+        selectedJavaId: effectiveJavaId,
         customJavaPath: useCustomJava ? customJavaPath.trim() : '',
         useCustomJava,
       });
@@ -524,55 +528,130 @@ export const InitWizard: React.FC<InitWizardProps> = ({ onComplete }) => {
                   <span className="font-bold text-btn-primary-active text-sm">第四步：确认 Java 运行环境 (静默扫描优选结果)</span>
                 </div>
                 <span className="text-[10px] px-2 py-0.5 bg-grass-80 text-white rounded">
-                  {isJavaScanning ? '⚡ 扫描中' : '⚡ 自动推荐就绪'}
+                  {isJavaScanning ? '⚡ 扫描中' : javaRuntimes.length > 0 ? '⚡ 自动推荐就绪' : '⚠ 未检测到 Java'}
                 </span>
               </div>
 
-              <div className="p-3 bg-dirt-20/25 ring-1 ring-surface-slot text-xs text-stone-80 leading-relaxed">
-                启动器已在后台静默完成系统 JDK 扫描与注册表分析，并为您智能推荐了最适合现代 Minecraft 运行的高性能 Java 运行环境：
-              </div>
+              {javaRuntimes.length > 0 ? (
+                <>
+                  <div className="p-3 bg-dirt-20/25 ring-1 ring-surface-slot text-xs text-stone-80 leading-relaxed">
+                    已在系统中成功扫描到 <span className="text-btn-primary-active font-bold font-mono">{javaRuntimes.length}</span> 个 Java 运行时。
+                    启动器支持全自动智能适配机制：在启动不同版本的 Minecraft 时（如 26.3 调度 Java 25，1.20.5+ 调度 Java 21，1.18~1.20 调度 Java 17，1.12 调度 Java 8），将自动选择最适配的 Java，您无需手动频繁切换。
+                  </div>
 
-              {/* 扫描到的 Java 列表 */}
-              <div className="flex flex-col gap-2 max-h-48 overflow-y-auto pr-1">
-                {javaRuntimes.map((runtime, idx) => {
-                  const isSelected = !useCustomJava && selectedJavaId === runtime.id;
-                  const isTopRecommended = idx === 0;
-                  return (
-                    <div
-                      key={runtime.id}
-                      onClick={() => {
-                        setSelectedJavaId(runtime.id);
-                        setUseCustomJava(false);
-                      }}
-                      className={`p-2.5 ring-1 cursor-pointer transition-colors flex flex-col gap-1 ${
-                        isSelected
-                          ? 'bg-stone-10 ring-2 ring-grass-60 shadow-[2px_2px_0_0_rgba(46,94,28,0.4)]'
-                          : 'bg-stone-10/60 ring-border-hard/40 hover:bg-stone-10'
-                      }`}
-                    >
-                      <div className="flex items-center justify-between">
-                        <div className="flex items-center gap-2">
-                          <input
-                            type="radio"
-                            name="init-java-choice"
-                            checked={isSelected}
-                            onChange={() => {}}
-                            className="accent-grass-60"
-                          />
-                          <span className="font-bold text-stone-100 text-xs">{runtime.name}</span>
-                          {isTopRecommended && (
-                            <span className="text-[9px] px-1.5 py-0.2 bg-grass-80 text-white rounded font-bold">
-                              ⚡ 智能推荐
-                            </span>
-                          )}
+                  {/* 扫描到的 Java 列表展示 */}
+                  <div className="flex flex-col gap-2 max-h-44 overflow-y-auto pr-1">
+                    {javaRuntimes.map((runtime, idx) => {
+                      const isSelected = !useCustomJava && selectedJavaId === runtime.id;
+                      const isTopRecommended = idx === 0 || runtime.majorVersion === 25 || runtime.majorVersion === 21;
+                      return (
+                        <div
+                          key={runtime.id}
+                          onClick={() => {
+                            setSelectedJavaId(runtime.id);
+                            setUseCustomJava(false);
+                          }}
+                          className={`p-2.5 ring-1 cursor-pointer transition-colors flex flex-col gap-1 ${
+                            isSelected
+                              ? 'bg-stone-10 ring-2 ring-grass-60 shadow-[2px_2px_0_0_rgba(46,94,28,0.4)]'
+                              : 'bg-stone-10/60 ring-border-hard/40 hover:bg-stone-10'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2">
+                              <input
+                                type="radio"
+                                name="init-java-choice"
+                                checked={isSelected}
+                                onChange={() => {}}
+                                className="accent-grass-60"
+                              />
+                              <span className="font-bold text-stone-100 text-xs">{runtime.name}</span>
+                              {isTopRecommended && (
+                                <span className="text-[9px] px-1.5 py-0.2 bg-grass-80 text-white rounded font-bold">
+                                  ⚡ 智能推荐
+                                </span>
+                              )}
+                            </div>
+                            <span className="text-[10px] text-grass-80 font-bold">{runtime.recommendedFor}</span>
+                          </div>
+                          <div className="text-[10px] text-stone-60 font-mono truncate pl-5">{runtime.path}</div>
                         </div>
-                        <span className="text-[10px] text-grass-80 font-bold">{runtime.recommendedFor}</span>
-                      </div>
-                      <div className="text-[10px] text-stone-60 font-mono truncate pl-5">{runtime.path}</div>
+                      );
+                    })}
+                  </div>
+                </>
+              ) : (
+                /* 未扫描到 Java 时的指引与下载建议 */
+                <div className="flex flex-col gap-3 p-3.5 bg-dirt-20/40 ring-2 ring-[#B8860B] border-l-4 border-[#FF8C00]">
+                  <div className="flex items-center justify-between">
+                    <div className="flex items-center gap-2">
+                      <span className="text-base">⚠</span>
+                      <span className="font-bold text-btn-primary-active text-xs">未检测到已安装的 Java (JDK)</span>
                     </div>
-                  );
-                })}
-              </div>
+                    <button
+                      type="button"
+                      onClick={async () => {
+                        setIsJavaScanning(true);
+                        try {
+                          const res = await scanSystemJavaRuntimes();
+                          if (res.length > 0) {
+                            setJavaRuntimes(res);
+                            const best = res.find((r) => r.majorVersion === 25) || res.find((r) => r.majorVersion === 21) || res[0];
+                            setSelectedJavaId(best.id);
+                          }
+                        } finally {
+                          setIsJavaScanning(false);
+                        }
+                      }}
+                      className="px-2.5 py-1 bg-btn-primary-bg hover:bg-btn-primary-hover text-white text-[11px] font-bold ring-1 ring-border-hard cursor-pointer"
+                    >
+                      🔄 重新扫描
+                    </button>
+                  </div>
+                  <div className="text-xs text-stone-80 leading-relaxed">
+                    Minecraft 是基于 Java 开发的游戏，运行游戏必须安装 Java 运行环境。建议您前往官方安全下载源安装对应版本的 JDK：
+                  </div>
+                  <div className="grid grid-cols-2 gap-2 pt-1">
+                    <a
+                      href="https://adoptium.net/temurin/releases/?version=21"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-2 bg-stone-10 ring-1 ring-border-hard hover:ring-grass-60 text-xs flex flex-col gap-0.5 text-stone-100 no-underline"
+                    >
+                      <span className="font-bold text-btn-primary-active">📥 Adoptium JDK 21 (推荐)</span>
+                      <span className="text-[10px] text-stone-60">支持 1.20.5+ 及 1.21+ 现代正式版</span>
+                    </a>
+                    <a
+                      href="https://adoptium.net/temurin/releases/?version=25"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-2 bg-stone-10 ring-1 ring-border-hard hover:ring-grass-60 text-xs flex flex-col gap-0.5 text-stone-100 no-underline"
+                    >
+                      <span className="font-bold text-btn-primary-active">📥 Adoptium JDK 25 (快照)</span>
+                      <span className="text-[10px] text-stone-60">支持 26.3+ 最新快照与实验特性</span>
+                    </a>
+                    <a
+                      href="https://adoptium.net/temurin/releases/?version=17"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-2 bg-stone-10 ring-1 ring-border-hard hover:ring-grass-60 text-xs flex flex-col gap-0.5 text-stone-100 no-underline"
+                    >
+                      <span className="font-bold text-btn-primary-active">📥 Adoptium JDK 17</span>
+                      <span className="text-[10px] text-stone-60">支持 1.18 ~ 1.20.4 中期版本</span>
+                    </a>
+                    <a
+                      href="https://adoptium.net/temurin/releases/?version=8"
+                      target="_blank"
+                      rel="noreferrer"
+                      className="p-2 bg-stone-10 ring-1 ring-border-hard hover:ring-grass-60 text-xs flex flex-col gap-0.5 text-stone-100 no-underline"
+                    >
+                      <span className="font-bold text-btn-primary-active">📥 Adoptium JDK 8</span>
+                      <span className="text-[10px] text-stone-60">支持 1.12.2 等旧版经典大型模组</span>
+                    </a>
+                  </div>
+                </div>
+              )}
 
               {/* 手动指定便携 Java 路径 */}
               <div className="pt-2 border-t border-dirt-40/30 flex flex-col gap-1.5">
@@ -584,7 +663,7 @@ export const InitWizard: React.FC<InitWizardProps> = ({ onComplete }) => {
                     onChange={() => setUseCustomJava(true)}
                     className="accent-grass-60"
                   />
-                  <span>手动指定自定义 Java 路径 (可选)</span>
+                  <span>手动指定自定义 Java 路径 (适用于便携版或免安装 JDK)</span>
                 </label>
                 {useCustomJava && (
                   <div className="flex items-center gap-2">
@@ -593,7 +672,7 @@ export const InitWizard: React.FC<InitWizardProps> = ({ onComplete }) => {
                       data-testid="init-custom-java-input"
                       value={customJavaPath}
                       onChange={(e) => setCustomJavaPath(e.target.value)}
-                      placeholder="例如: C:\Java\jdk-21\bin\javaw.exe"
+                      placeholder="例如: C:\Java\jdk-25\bin\javaw.exe"
                       className="flex-1 bg-stone-10 px-3 py-1.5 ring-1 ring-border-hard text-xs text-stone-100 font-mono outline-none"
                     />
                     <button

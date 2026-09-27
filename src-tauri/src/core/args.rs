@@ -57,10 +57,15 @@ pub fn build_launch_arguments(
         }
     }
 
-    // 2. 基础 JVM 系统属性
+    // 2. 基础 JVM 系统属性与控制台编码统一
     jvm_args.push(format!("-Djava.library.path={}", natives_dir.to_string_lossy()));
     jvm_args.push("-Dminecraft.launcher.brand=AtomLauncher".to_string());
     jvm_args.push("-Dminecraft.launcher.version=1.0.0".to_string());
+    jvm_args.push("-Dfile.encoding=UTF-8".to_string());
+    if java_major >= 9 {
+        jvm_args.push("-Dsun.stdout.encoding=UTF-8".to_string());
+        jvm_args.push("-Dsun.stderr.encoding=UTF-8".to_string());
+    }
 
     // 3. 构建当前运行特性的 FeatureFlags
     let has_custom_res = window_width.is_some() || window_height.is_some();
@@ -70,9 +75,13 @@ pub fn build_launch_arguments(
         is_quick_play_singleplayer: false,
         is_quick_play_multiplayer: false,
         is_quick_play_realms: false,
+        is_quick_play_path: false,
     };
 
-    // 4. 解析版本自带的 JVM 参数模板（过滤掉 -cp / -classpath / ${classpath}，评估 rules）
+    let cp_separator = if cfg!(windows) { ";" } else { ":" };
+    let lib_dir = game_dir.join("libraries");
+
+    // 4. 解析版本自带的 JVM 参数模板（过滤掉 standalone -cp / -classpath / ${classpath}，评估 rules，替换宏变量）
     for entry in &meta.jvm_args_entries {
         if !evaluate_rules(&entry.rules, &runtime_features) {
             continue;
@@ -110,8 +119,12 @@ pub fn build_launch_arguments(
             replaced = replaced.replace("${natives_directory}", &natives_dir.to_string_lossy());
             replaced = replaced.replace("${launcher_name}", "AtomLauncher");
             replaced = replaced.replace("${launcher_version}", "1.0.0");
+            replaced = replaced.replace("${library_directory}", &lib_dir.to_string_lossy());
+            replaced = replaced.replace("${classpath_separator}", cp_separator);
+            replaced = replaced.replace("${game_directory}", &work_dir.to_string_lossy());
+            replaced = replaced.replace("${version_name}", &meta.id);
 
-            if !replaced.is_empty() && !jvm_args.contains(&replaced) && !replaced.contains("${classpath}") {
+            if !replaced.is_empty() && !jvm_args.contains(&replaced) && !replaced.starts_with("${") {
                 jvm_args.push(replaced);
             }
             idx += 1;
@@ -127,6 +140,9 @@ pub fn build_launch_arguments(
             if !evaluate_rules(&entry.rules, &runtime_features) {
                 continue; // 彻底排除未启用的 Quick Play / Demo 选项！
             }
+
+            let mut entry_args = Vec::new();
+            let mut skip_entry = false;
 
             for val in &entry.values {
                 let mut replaced = val.clone();
@@ -144,10 +160,20 @@ pub fn build_launch_arguments(
                 replaced = replaced.replace("${resolution_width}", &width_str);
                 replaced = replaced.replace("${resolution_height}", &height_str);
 
-                // 只有完全替换了模板变量的参数才加入（防止未识别的 ${...} 混入）
-                if !replaced.is_empty() && !replaced.starts_with("${") {
-                    game_args.push(replaced);
+                // 如果参数含有未被识别/未被替换的宏变量（如未启用的 ${quick_play_path}），说明当前启动配置不具备该参数所需的环境，
+                // 必须放弃整组参数条目（如同时放弃 --quickPlayPath 与其参数），以防 joptsimple 报 OptionMissingRequiredArgumentException
+                if replaced.starts_with("${") && replaced.ends_with('}') {
+                    skip_entry = true;
+                    break;
                 }
+
+                if !replaced.is_empty() {
+                    entry_args.push(replaced);
+                }
+            }
+
+            if !skip_entry {
+                game_args.extend(entry_args);
             }
         }
     } else {
@@ -191,4 +217,117 @@ pub fn build_launch_arguments(
     }
 
     (jvm_args, game_args)
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use crate::core::types::{ArgumentEntry, ArgumentRule, ResolvedVersionMeta};
+    use std::collections::HashMap;
+
+    #[test]
+    fn test_quick_play_path_arguments_excluded() {
+        let mut feat_map = HashMap::new();
+        feat_map.insert("is_quick_play_path".to_string(), true);
+
+        let qp_rule = ArgumentRule {
+            action: "allow".to_string(),
+            os_name: None,
+            os_version: None,
+            os_arch: None,
+            is_demo_user: None,
+            has_custom_resolution: None,
+            is_quick_play_singleplayer: None,
+            is_quick_play_multiplayer: None,
+            is_quick_play_realms: None,
+            is_quick_play_path: Some(true),
+            features: feat_map,
+        };
+
+        let meta = ResolvedVersionMeta {
+            id: "26.3".to_string(),
+            main_class: "net.minecraft.client.main.Main".to_string(),
+            java_major_version: 25,
+            assets_index: "26".to_string(),
+            classpath_entries: vec![],
+            jvm_args_entries: vec![],
+            game_args_entries: vec![
+                ArgumentEntry {
+                    values: vec!["--username".to_string(), "${auth_player_name}".to_string()],
+                    rules: vec![],
+                },
+                ArgumentEntry {
+                    values: vec![
+                        "--quickPlayPath".to_string(),
+                        "${quick_play_path}".to_string(),
+                    ],
+                    rules: vec![qp_rule],
+                },
+            ],
+            loader_type: "vanilla".to_string(),
+        };
+
+        let game_dir = std::path::PathBuf::from("dummy_game");
+        let work_dir = std::path::PathBuf::from("dummy_work");
+        let (_jvm, game) = build_launch_arguments(
+            &meta,
+            &game_dir,
+            &work_dir,
+            meta.java_major_version,
+            "Steve",
+            "00000000-0000-0000-0000-000000000000",
+            "dummy_token",
+            "mojang",
+            "0",
+            None,
+            None,
+            false,
+        );
+
+        // --quickPlayPath MUST NOT be included!
+        assert!(!game.contains(&"--quickPlayPath".to_string()));
+        assert!(game.contains(&"--username".to_string()));
+        assert!(game.contains(&"Steve".to_string()));
+    }
+
+    #[test]
+    fn test_unresolved_placeholder_atomic_skip() {
+        // Even if rules are empty, an unreplaced pair like ["--customFlag", "${unresolved_var}"]
+        // must be discarded atomically to prevent joptsimple ArgumentAcceptingOptionSpec crash
+        let meta = ResolvedVersionMeta {
+            id: "26.3".to_string(),
+            main_class: "net.minecraft.client.main.Main".to_string(),
+            java_major_version: 25,
+            assets_index: "26".to_string(),
+            classpath_entries: vec![],
+            jvm_args_entries: vec![],
+            game_args_entries: vec![ArgumentEntry {
+                values: vec![
+                    "--customFlag".to_string(),
+                    "${unresolved_var}".to_string(),
+                ],
+                rules: vec![],
+            }],
+            loader_type: "vanilla".to_string(),
+        };
+
+        let game_dir = std::path::PathBuf::from("dummy_game");
+        let work_dir = std::path::PathBuf::from("dummy_work");
+        let (_jvm, game) = build_launch_arguments(
+            &meta,
+            &game_dir,
+            &work_dir,
+            meta.java_major_version,
+            "Steve",
+            "00000000-0000-0000-0000-000000000000",
+            "dummy_token",
+            "mojang",
+            "0",
+            None,
+            None,
+            false,
+        );
+
+        assert!(!game.contains(&"--customFlag".to_string()));
+    }
 }

@@ -7,7 +7,7 @@ interface ToolsViewProps {
 }
 
 export const ToolsView: React.FC<ToolsViewProps> = ({
-  pluginDir = "D:/tauri-apps/AtomLauncher/atom-launcher/src/my-demo",
+  pluginDir = "src/my-demo",
   entryJs = "ui/index.js",
 }) => {
   return (

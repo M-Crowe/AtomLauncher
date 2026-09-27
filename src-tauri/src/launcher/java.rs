@@ -74,11 +74,53 @@ pub fn get_java_info_from_executable(exe_path: &Path) -> Option<JavaRuntimeInfo>
 
     let is_recommended = major_version >= 17 && is_64bit;
 
+    let path_to_save = if cfg!(windows) {
+        let parent = exe_path.parent().unwrap_or(exe_path);
+        let javaw = parent.join("javaw.exe");
+        if javaw.exists() {
+            javaw.to_string_lossy().to_string()
+        } else {
+            exe_path.to_string_lossy().to_string()
+        }
+    } else {
+        exe_path.to_string_lossy().to_string()
+    };
+
+    let arch = if out_str.contains("arm64") || out_str.contains("aarch64") {
+        "arm64".to_string()
+    } else if is_64bit {
+        "x64".to_string()
+    } else {
+        "x86".to_string()
+    };
+
+    let recommended_for = if major_version >= 25 {
+        "26.3+ 快照及未来版本".to_string()
+    } else if major_version >= 21 {
+        "1.20.5+ 及 1.21+ 现代版本".to_string()
+    } else if major_version >= 17 {
+        "1.18 ~ 1.20.4 中期版本".to_string()
+    } else if major_version == 16 {
+        "1.17 版本".to_string()
+    } else if major_version == 8 {
+        "1.12.2 及更早经典版本".to_string()
+    } else {
+        "Minecraft 通用运行环境".to_string()
+    };
+
+    let id = format!("java-{}-{}", major_version, path_to_save.replace(['\\', '/', ':', ' '], "_"));
+    let name = format!("{vendor} JDK {major_version} ({version_string})");
+
     Some(JavaRuntimeInfo {
-        path: exe_path.to_string_lossy().to_string(),
+        id,
+        name,
+        path: path_to_save,
+        version: version_string,
         major_version,
-        version_string,
+        arch,
         vendor,
+        recommended_for,
+        is_auto_detected: true,
         is_64bit,
         is_recommended,
     })

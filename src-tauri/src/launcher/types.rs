@@ -81,10 +81,15 @@ pub struct StartedPayload {
 #[derive(Debug, Clone, Serialize, Deserialize)]
 #[serde(rename_all = "camelCase")]
 pub struct JavaRuntimeInfo {
+    pub id: String,
+    pub name: String,
     pub path: String,
+    pub version: String,
     pub major_version: u32,
-    pub version_string: String,
+    pub arch: String,
     pub vendor: String,
+    pub recommended_for: String,
+    pub is_auto_detected: bool,
     pub is_64bit: bool,
     pub is_recommended: bool,
 }

@@ -40,6 +40,11 @@ pub fn execute_microsoft_chain(ms_access_token: &str, ms_refresh_token: Option<&
     let uhs = xbl_json["DisplayClaims"]["xui"][0]["uhs"]
         .as_str()
         .ok_or("缺失 Xbox Live UHS")?;
+    let xid = xbl_json["DisplayClaims"]["xui"][0]["xid"]
+        .as_str()
+        .or_else(|| xbl_json["DisplayClaims"]["xui"][0]["xuid"].as_str())
+        .unwrap_or(uhs)
+        .to_string();
 
     // 2. XSTS Authorize
     let xsts_res = client
@@ -150,6 +155,6 @@ pub fn execute_microsoft_chain(ms_access_token: &str, ms_refresh_token: Option<&
         expires_at: Some(expires_at),
         skin_url,
         is_active: true,
-        xuid: Some(uhs.to_string()),
+        xuid: Some(xid),
     })
 }

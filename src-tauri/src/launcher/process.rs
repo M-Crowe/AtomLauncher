@@ -57,22 +57,65 @@ pub fn launch_minecraft(
     let meta = crate::core::resolve_version_meta(&game_dir, &options.version_id)
         .map_err(|e| format!("解析版本信息失败: {e}"))?;
 
-    // 2. 依据版本需求精准选择 Java 运行时（例如 MC Eternal 2 / 1.18~1.20 选 Java 17，26.3 快照选 Java 25，1.21 选 Java 21）
+    // 2. 依据用户指定或版本需求精准选择 Java 运行时 (参考 SCL 智能适配逻辑)
     let mut java_path = options.java_path.trim().to_string();
-    if let Ok(runtimes) = detect_java_environments() {
+    let is_auto_java = java_path.is_empty()
+        || java_path.eq_ignore_ascii_case("auto")
+        || java_path.eq_ignore_ascii_case("javaw.exe")
+        || java_path.eq_ignore_ascii_case("java.exe");
+
+    let runtimes = detect_java_environments().unwrap_or_default();
+
+    if is_auto_java {
+        // 自动模式：按 Minecraft 版本所需的大版本精准寻找最适合的 Java
         if let Some(exact) = runtimes.iter().find(|r| r.major_version == meta.java_major_version) {
             java_path = exact.path.clone();
-        } else if let Some(compatible) = runtimes.iter().find(|r| r.major_version >= meta.java_major_version) {
+        } else if let Some(compatible) = runtimes.iter().find(|r| {
+            if meta.java_major_version <= 8 {
+                r.major_version == 8
+            } else {
+                r.major_version >= meta.java_major_version
+            }
+        }) {
             java_path = compatible.path.clone();
-        } else if java_path == "javaw.exe" || java_path == "java.exe" || java_path.is_empty() {
-            if let Some(first) = runtimes.first() {
-                java_path = first.path.clone();
+        } else if let Some(first) = runtimes.first() {
+            java_path = first.path.clone();
+        }
+    } else {
+        // 用户指定了某个 Java 路径，先检查该路径是否能满足目标版本的最低大版本要求
+        // 如果用户指定的 Java 版本过低（例如用 Java 17 尝试启动需要 Java 25 的 26.3 快照）：
+        // 检查系统中是否有满足要求的 Java，若有则自动纠偏；若无则提前明确报错阻止崩溃！
+        let is_incompatible = if let Some(user_rt) = runtimes.iter().find(|r| r.path.eq_ignore_ascii_case(&java_path)) {
+            if meta.java_major_version <= 8 {
+                user_rt.major_version != 8
+            } else {
+                user_rt.major_version < meta.java_major_version
+            }
+        } else {
+            false
+        };
+
+        if is_incompatible {
+            if let Some(matched) = runtimes.iter().find(|r| r.major_version == meta.java_major_version) {
+                eprintln!(
+                    "[AtomLauncher] 用户配置的 Java 无法运行版本 {} (需要 Java {})，已智能自动切换为匹配的 Java {}: {}",
+                    options.version_id, meta.java_major_version, matched.major_version, matched.path
+                );
+                java_path = matched.path.clone();
+            } else {
+                return Err(format!(
+                    "当前 Minecraft 版本 ({}) 需要 Java {} 运行环境，但当前配置的 Java 无法运行该版本。请安装对应版本的 JDK 或在设置中切换 Java。",
+                    options.version_id, meta.java_major_version
+                ));
             }
         }
     }
 
     if java_path.is_empty() {
-        return Err("Java 路径不能为空，请在设置中配置有效 Java 运行时".to_string());
+        return Err(format!(
+            "未检测到可运行 Minecraft {} 的 Java 运行环境（需要 Java {}）。请在设置中配置有效 Java 或前往下载 JDK。",
+            options.version_id, meta.java_major_version
+        ));
     }
 
     let version_dir = game_dir.join("versions").join(&options.version_id);
@@ -87,6 +130,9 @@ pub fn launch_minecraft(
         game_dir.clone()
     };
 
+    // 提前解压该版本及继承链所需的 Natives 本地动态库 (.dll/.dylib/.so)
+    let _ = crate::core::extract_natives(&game_dir, &work_dir, &options.version_id);
+
     // 3. 真实账号解析与 Token 自动续期（离线 / 微软正版）
     let mut username = options.username.clone().unwrap_or_default();
     let mut uuid = options.uuid.clone().unwrap_or_default();
@@ -94,26 +140,35 @@ pub fn launch_minecraft(
     let mut user_type = options.user_type.clone().unwrap_or_else(|| "mojang".to_string());
     let mut xuid = options.xuid.clone().unwrap_or_else(|| "0".to_string());
 
-    if username.is_empty() || uuid.is_empty() || access_token.is_empty() {
-        if let Ok(Some(mut active_acc)) = crate::auth::get_active_account() {
-            if active_acc.account_type == crate::auth::AccountType::Microsoft {
-                let _ = crate::auth::refresh_microsoft_token_if_needed(&mut active_acc);
-                user_type = "msa".to_string();
-                xuid = active_acc.xuid.clone().unwrap_or_else(|| "0".to_string());
-            } else {
-                user_type = "mojang".to_string();
-                xuid = "0".to_string();
+    // 检查微软正版 Token 有效性并适时自动续期
+    if let Ok(Some(mut active_acc)) = crate::auth::get_active_account() {
+        if active_acc.account_type == crate::auth::AccountType::Microsoft {
+            let _ = crate::auth::refresh_microsoft_token_if_needed(&mut active_acc);
+            user_type = "msa".to_string();
+            xuid = active_acc.xuid.clone().unwrap_or_else(|| "0".to_string());
+            username = active_acc.name.clone();
+            uuid = active_acc.uuid.clone();
+            access_token = active_acc.access_token.clone();
+            let cache = crate::auth::get_accounts_cache();
+            if let Ok(mut storage) = cache.lock() {
+                if let Some(pos) = storage.accounts.iter().position(|a| a.id == active_acc.id) {
+                    storage.accounts[pos] = active_acc;
+                    crate::auth::save_accounts_to_disk(&storage);
+                }
             }
-            username = active_acc.name;
-            uuid = active_acc.uuid;
-            access_token = active_acc.access_token;
         } else {
-            username = "Player".to_string();
-            uuid = "00000000-0000-0000-0000-000000000000".to_string();
-            access_token = "00000000000000000000000000000000".to_string();
             user_type = "mojang".to_string();
-            xuid = "0".to_string();
         }
+    }
+
+    if username.is_empty() {
+        username = "Player".to_string();
+    }
+    if uuid.is_empty() {
+        uuid = "00000000-0000-0000-0000-000000000000".to_string();
+    }
+    if access_token.is_empty() {
+        access_token = "00000000000000000000000000000000".to_string();
     }
 
     let (jvm_flags, game_flags) = crate::core::build_launch_arguments(
@@ -165,8 +220,22 @@ pub fn launch_minecraft(
             .collect::<Vec<_>>()
             .join(cp_separator)
     };
-    cmd.arg("-cp");
-    cmd.arg(&classpath_str);
+
+    // Windows 命令行 32KB 限制保护：若 classpath 过长且 Java >= 9，使用 @argfile 参数文件传参
+    if cfg!(windows) && classpath_str.len() > 28000 && meta.java_major_version >= 9 {
+        let argfile_path = work_dir.join(".atom_classpath.args");
+        let safe_cp = classpath_str.replace('\\', "/");
+        if let Err(e) = fs::write(&argfile_path, format!("-cp\n\"{}\"\n", safe_cp)) {
+            eprintln!("[AtomLauncher] 写入 argfile 失败，回退到普通 -cp: {}", e);
+            cmd.arg("-cp");
+            cmd.arg(&classpath_str);
+        } else {
+            cmd.arg(format!("@{}", argfile_path.display()));
+        }
+    } else {
+        cmd.arg("-cp");
+        cmd.arg(&classpath_str);
+    }
 
     // Main Class
     cmd.arg(&meta.main_class);
@@ -231,30 +300,38 @@ pub fn launch_minecraft(
     if let Some(out) = stdout {
         let app_handle = app.clone();
         thread::spawn(move || {
-            let reader = BufReader::new(out);
-            for line_res in reader.lines() {
-                if let Ok(line) = line_res {
-                    let level = if line.contains("ERROR") || line.contains("Exception") || line.contains("Error") {
-                        "ERROR"
-                    } else if line.contains("WARN") {
-                        "WARN"
-                    } else if line.contains("DEBUG") {
-                        "DEBUG"
-                    } else {
-                        "INFO"
-                    };
-                    let ts = format_now_time();
-                    let _ = app_handle.emit(
-                        "minecraft-log",
-                        LogPayload {
-                            pid,
-                            line,
-                            level: level.to_string(),
-                            timestamp: ts,
-                            is_error: false,
-                        },
-                    );
+            let mut reader = BufReader::new(out);
+            let mut buf = Vec::new();
+            while let Ok(n) = reader.read_until(b'\n', &mut buf) {
+                if n == 0 {
+                    break;
                 }
+                while buf.ends_with(b"\n") || buf.ends_with(b"\r") {
+                    buf.pop();
+                }
+                let line = String::from_utf8_lossy(&buf).to_string();
+                buf.clear();
+
+                let level = if line.contains("ERROR") || line.contains("Exception") || line.contains("Error") {
+                    "ERROR"
+                } else if line.contains("WARN") {
+                    "WARN"
+                } else if line.contains("DEBUG") {
+                    "DEBUG"
+                } else {
+                    "INFO"
+                };
+                let ts = format_now_time();
+                let _ = app_handle.emit(
+                    "minecraft-log",
+                    LogPayload {
+                        pid,
+                        line,
+                        level: level.to_string(),
+                        timestamp: ts,
+                        is_error: false,
+                    },
+                );
             }
         });
     }
@@ -263,21 +340,29 @@ pub fn launch_minecraft(
     if let Some(err) = stderr {
         let app_handle = app.clone();
         thread::spawn(move || {
-            let reader = BufReader::new(err);
-            for line_res in reader.lines() {
-                if let Ok(line) = line_res {
-                    let ts = format_now_time();
-                    let _ = app_handle.emit(
-                        "minecraft-log",
-                        LogPayload {
-                            pid,
-                            line,
-                            level: "ERROR".to_string(),
-                            timestamp: ts,
-                            is_error: true,
-                        },
-                    );
+            let mut reader = BufReader::new(err);
+            let mut buf = Vec::new();
+            while let Ok(n) = reader.read_until(b'\n', &mut buf) {
+                if n == 0 {
+                    break;
                 }
+                while buf.ends_with(b"\n") || buf.ends_with(b"\r") {
+                    buf.pop();
+                }
+                let line = String::from_utf8_lossy(&buf).to_string();
+                buf.clear();
+
+                let ts = format_now_time();
+                let _ = app_handle.emit(
+                    "minecraft-log",
+                    LogPayload {
+                        pid,
+                        line,
+                        level: "ERROR".to_string(),
+                        timestamp: ts,
+                        is_error: true,
+                    },
+                );
             }
         });
     }

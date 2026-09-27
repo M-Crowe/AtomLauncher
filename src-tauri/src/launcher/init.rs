@@ -156,7 +156,26 @@ pub fn load_launcher_config() -> Result<serde_json::Value, String> {
 pub fn save_launcher_config(config: serde_json::Value) -> Result<(), String> {
     let atom_dir = crate::core::paths::get_atom_dir();
     let config_path = atom_dir.join("config.json");
-    let content = serde_json::to_string_pretty(&config)
+
+    let mut config_map = if config_path.exists() {
+        fs::read_to_string(&config_path)
+            .ok()
+            .and_then(|c| serde_json::from_str::<serde_json::Value>(&c).ok())
+            .and_then(|v| v.as_object().cloned())
+            .unwrap_or_default()
+    } else {
+        serde_json::Map::new()
+    };
+
+    if let Some(obj) = config.as_object() {
+        for (k, v) in obj {
+            config_map.insert(k.clone(), v.clone());
+        }
+    }
+    // 确保初始化状态始终保持为 true，防止后续保存设置时抹除 initialized 导致重复弹出初始化向导
+    config_map.insert("initialized".to_string(), serde_json::Value::Bool(true));
+
+    let content = serde_json::to_string_pretty(&config_map)
         .map_err(|e| format!("无法序列化配置: {}", e))?;
     fs::write(&config_path, content)
         .map_err(|e| format!("无法保存 config.json: {}", e))?;

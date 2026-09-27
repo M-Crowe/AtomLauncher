@@ -15,16 +15,16 @@ pub fn get_system_minecraft_dirs() -> Vec<(PathBuf, String)> {
                 dirs.push((p, "系统默认 .minecraft".to_string()));
             }
         }
-        // 2. Windows Store / UWP Minecraft 目录 (Packages)
+        // 2. Windows 官方应用商店版 Minecraft 目录 (Microsoft.4297127D64C57_8wekyb3d8bbwe)
         if let Ok(local_app_data) = std::env::var("LOCALAPPDATA") {
             let store_p = PathBuf::from(local_app_data)
                 .join("Packages")
-                .join("Microsoft.MinecraftUWP_8wekyb3d8bbwe")
-                .join("LocalState")
-                .join("games")
-                .join("com.mojang");
+                .join("Microsoft.4297127D64C57_8wekyb3d8bbwe")
+                .join("LocalCache")
+                .join("Local")
+                .join(".minecraft");
             if store_p.exists() {
-                dirs.push((store_p, "Windows 官方商店版".to_string()));
+                dirs.push((store_p, "微软商店官方启动器".to_string()));
             }
         }
     }

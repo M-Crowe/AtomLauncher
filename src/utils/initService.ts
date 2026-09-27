@@ -29,6 +29,10 @@ export async function getLauncherInitState(): Promise<LauncherInitState> {
 }
 
 export async function saveInitConfiguration(config: LauncherInitConfig): Promise<void> {
+  if (typeof window !== 'undefined' && window.localStorage) {
+    window.localStorage.setItem(INIT_FALLBACK_KEY, 'true');
+  }
+
   if (IS_TAURI) {
     try {
       const { invoke } = await import('@tauri-apps/api/core');
@@ -37,11 +41,6 @@ export async function saveInitConfiguration(config: LauncherInitConfig): Promise
     } catch (err) {
       console.warn('Failed to invoke save_init_configuration:', err);
     }
-  }
-
-  // Browser / Test fallback
-  if (typeof window !== 'undefined' && window.localStorage) {
-    window.localStorage.setItem(INIT_FALLBACK_KEY, 'true');
   }
 }
 

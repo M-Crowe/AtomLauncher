@@ -304,16 +304,17 @@ export const SettingsView: React.FC = () => {
     scanSystemJavaRuntimes().then((detected) => {
       if (!isSubscribed) return;
       if (detected.length > 0) {
-        setRuntimes(detected);
+        const sorted = [...detected].sort((a, b) => b.majorVersion - a.majorVersion);
+        setRuntimes(sorted);
         setSettings((prev) => {
-          if (!prev.selectedJavaId || !detected.some((r) => r.id === prev.selectedJavaId)) {
-            const recommended = detected.find((r) => r.majorVersion === 21) || detected[0];
-            return {
-              ...prev,
-              selectedJavaId: recommended.id,
-            };
+          // 若已有选择（包括 auto 或有效 ID），予以尊重保留；仅在从未配置时默认使用 auto
+          if (prev.selectedJavaId === 'auto' || detected.some((r) => r.id === prev.selectedJavaId)) {
+            return prev;
           }
-          return prev;
+          return {
+            ...prev,
+            selectedJavaId: prev.selectedJavaId || 'auto',
+          };
         });
       }
     });
@@ -329,22 +330,22 @@ export const SettingsView: React.FC = () => {
     try {
       const detected = await scanSystemJavaRuntimes();
       if (!isMountedRef.current) return;
-      setRuntimes(detected);
       if (detected.length > 0) {
+        const sorted = [...detected].sort((a, b) => b.majorVersion - a.majorVersion);
+        setRuntimes(sorted);
         setScanMessage(`已成功检测到 ${detected.length} 个实际安装的 Java 环境`);
         showToast(`已检测到 ${detected.length} 个 Java 运行时`);
         setSettings((prev) => {
-          if (!prev.selectedJavaId || !detected.some((r) => r.id === prev.selectedJavaId)) {
-            const recommended = detected.find((r) => r.majorVersion === 21) || detected[0];
-            return {
-              ...prev,
-              selectedJavaId: recommended.id,
-            };
+          if (prev.selectedJavaId === 'auto' || detected.some((r) => r.id === prev.selectedJavaId)) {
+            return prev;
           }
-          return prev;
+          return {
+            ...prev,
+            selectedJavaId: 'auto',
+          };
         });
       } else {
-        setScanMessage('未在常用路径检测到 Java，请在下方手动指定路径');
+        setScanMessage('未在常用路径检测到 Java，请在下方手动指定路径或下载 JDK');
         showToast('未检测到已安装的 Java');
       }
     } catch {
@@ -521,17 +522,68 @@ export const SettingsView: React.FC = () => {
                   </div>
                 ) : (
                   <div className="flex flex-col gap-2">
+                    {/* 智能自动匹配项 (SCL 模式) */}
+                    {(() => {
+                      const isAutoSelected = !settings.useCustomJava && (settings.selectedJavaId === 'auto' || !settings.selectedJavaId);
+                      const selectAuto = () => {
+                        setSettings((s) => {
+                          const next = { ...s, useCustomJava: false, selectedJavaId: 'auto' };
+                          saveLauncherSettings(next);
+                          return next;
+                        });
+                        showToast('已开启 Java 智能自动适配 (推荐)');
+                      };
+                      return (
+                        <div
+                          onClick={selectAuto}
+                          className={`p-3 ring-2 cursor-pointer transition-all flex flex-col gap-1 ${
+                            isAutoSelected
+                              ? 'bg-stone-10 ring-[#2E5E1C] shadow-[2px_2px_0_0_#2E5E1C]'
+                              : 'bg-stone-10/70 ring-surface-slot/30 hover:bg-stone-10 hover:ring-surface-slot/60'
+                          }`}
+                        >
+                          <div className="flex items-center justify-between">
+                            <div className="flex items-center gap-2.5">
+                              <input
+                                type="radio"
+                                name="java-select"
+                                checked={isAutoSelected}
+                                onChange={selectAuto}
+                                className="accent-[#2E5E1C] cursor-pointer h-4 w-4"
+                              />
+                              <span className="font-bold text-[#1F1F1F] text-[13px]">智能自动匹配 (全版本自适应)</span>
+                              <span className="text-[10px] px-1.5 py-0.2 bg-[#2E5E1C] text-white rounded font-mono font-bold">
+                                推荐
+                              </span>
+                            </div>
+                            <span className="text-[11px] text-[#2E5E1C] font-bold">按 Minecraft 版本自适应</span>
+                          </div>
+                          <div className="text-[11px] text-[#2F1F17] pl-6">
+                            自动根据所启动游戏需求匹配 Java（26.3 调度 Java 25，1.20.5+ 调度 Java 21，1.18~1.20.4 调度 Java 17，1.12 调度 Java 8）
+                          </div>
+                        </div>
+                      );
+                    })()}
+
+                    {/* 具体 Java 运行时列表 */}
                     {runtimes.map((r) => {
                       const isSelected = !settings.useCustomJava && settings.selectedJavaId === r.id;
-                      const selectJava = () =>
-                        setSettings((s) => ({
-                          ...s,
-                          useCustomJava: false,
-                          selectedJavaId: r.id,
-                        }));
+                      const selectJava = () => {
+                        setSettings((s) => {
+                          const next = {
+                            ...s,
+                            useCustomJava: false,
+                            selectedJavaId: r.id,
+                          };
+                          saveLauncherSettings(next);
+                          return next;
+                        });
+                        showToast(`已选择 Java 环境: ${r.name}`);
+                      };
                       return (
-                        <label
+                        <div
                           key={r.id}
+                          onClick={selectJava}
                           className={`p-3 ring-2 cursor-pointer transition-all flex flex-col gap-1 ${
                             isSelected
                               ? 'bg-stone-10 ring-[#2E5E1C] shadow-[2px_2px_0_0_#2E5E1C]'
@@ -555,7 +607,7 @@ export const SettingsView: React.FC = () => {
                             <span className="text-[11px] text-[#2E5E1C] font-bold">{r.recommendedFor}</span>
                           </div>
                           <div className="text-[11px] text-[#2F1F17] font-mono truncate pl-6">{r.path}</div>
-                        </label>
+                        </div>
                       );
                     })}
                   </div>

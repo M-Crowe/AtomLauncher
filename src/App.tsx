@@ -122,25 +122,40 @@ function App() {
     let unlistenExit: (() => void) | undefined;
     let unlistenStarted: (() => void) | undefined;
 
-    listenMinecraftLog((payload) => {
+    let pendingLogs: Array<{
+      id: string;
+      pid: number;
+      line: string;
+      level: string;
+      timestamp: string;
+      isError: boolean;
+    }> = [];
+    let flushTimeout: ReturnType<typeof setTimeout> | null = null;
+
+    const flushLogs = () => {
+      if (pendingLogs.length === 0) return;
+      const batch = pendingLogs;
+      pendingLogs = [];
+      flushTimeout = null;
       setLogs((prev) => {
-        // Prevent duplicate adjacent logs
-        const last = prev[prev.length - 1];
-        if (last && last.line === payload.line && last.timestamp === payload.timestamp && last.pid === payload.pid) {
-          return prev;
-        }
-        return [
-          ...prev.slice(-1999),
-          {
-            id: `${Date.now()}-${Math.random()}`,
-            pid: payload.pid,
-            line: payload.line,
-            level: payload.level,
-            timestamp: payload.timestamp,
-            isError: payload.isError,
-          },
-        ];
+        const combined = [...prev, ...batch];
+        return combined.length > 2000 ? combined.slice(-2000) : combined;
       });
+    };
+
+    listenMinecraftLog((payload) => {
+      pendingLogs.push({
+        id: `${Date.now()}-${Math.random()}`,
+        pid: payload.pid,
+        line: payload.line,
+        level: payload.level,
+        timestamp: payload.timestamp,
+        isError: payload.isError,
+      });
+
+      if (!flushTimeout) {
+        flushTimeout = setTimeout(flushLogs, 80);
+      }
     }).then((unlisten) => {
       if (isCancelled) {
         unlisten();
@@ -150,6 +165,7 @@ function App() {
     });
 
     listenMinecraftExit((payload) => {
+      flushLogs();
       setRunningPid(null);
       setLaunchState(payload.success ? "exited" : "crashed");
     }).then((unlisten) => {
@@ -173,6 +189,10 @@ function App() {
 
     return () => {
       isCancelled = true;
+      if (flushTimeout) {
+        clearTimeout(flushTimeout);
+      }
+      flushLogs();
       unlistenLog?.();
       unlistenExit?.();
       unlistenStarted?.();
@@ -325,7 +345,7 @@ function App() {
               {currentTab === "settings" && <SettingsView />}
               {currentTab === "tools" && (
                 <ToolsView
-                  pluginDir={"D:/tauri-apps/AtomLauncher/atom-launcher/src/my-demo"}
+                  pluginDir="src/my-demo"
                   entryJs="ui/index.js"
                 />
               )}
