@@ -8,57 +8,53 @@ interface AccountCardProps {
 }
 
 export const AccountCard: React.FC<AccountCardProps> = ({ account, onClick }) => {
-  const username = account?.name || 'Player';
+  const username = account?.name || 'USERNAME';
   const isMicrosoft = account?.accountType === 'microsoft';
 
   return (
-    <button
-      type="button"
+    <div
       data-testid="top-account-card"
       onClick={onClick}
       className="
         h-full w-full
-        flex items-center justify-between
-        px-3.5 py-2
-        bg-surface-card hover:bg-dirt-20/40 active:bg-dirt-20/60
-        ring-2 ring-inset ring-surface-slot hover:ring-grass-80
-        shadow-[3px_3px_0_0_rgba(0,0,0,0.35)]
-        cursor-pointer select-none transition-all
-        group text-left
+        flex items-center justify-end gap-3.5
+        cursor-pointer select-none
+        group
+        transition-opacity hover:opacity-85 active:opacity-70
       "
-      title="点击管理与切换 Minecraft 账户"
+      title="点击切换与管理账号"
     >
-      <div className="flex items-center gap-3 min-w-0 flex-1">
-        <PixelAvatar skinUrl={account?.skinUrl} size={38} className="group-hover:scale-105 transition-transform" />
-        <div className="flex flex-col min-w-0 flex-1 justify-center">
-          <div className="flex items-center gap-1.5">
-            <span
-              data-testid="account-card-username"
-              className="font-fusion text-sm font-bold text-stone-100 truncate tracking-wide"
-            >
-              {username}
-            </span>
-          </div>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <span
-              data-testid="account-card-type-badge"
-              className={`
-                font-fusion text-[10px] px-1.5 py-0.2 rounded-xs font-medium tracking-tight whitespace-nowrap
-                ${isMicrosoft
-                  ? 'bg-emerald-700/80 text-emerald-100 ring-1 ring-emerald-500/50'
-                  : 'bg-stone-700/80 text-stone-200 ring-1 ring-stone-500/50'
-                }
-              `}
-            >
-              {isMicrosoft ? '[微软正版]' : '[离线]'}
-            </span>
-          </div>
-        </div>
+      {/* 玩家名称与类型标签 (纯文本排列，无任何多余边框与底框，完美契合图二) */}
+      <div className="flex flex-col items-end justify-center min-w-0">
+        <span
+          data-testid="account-card-username"
+          className="
+            font-fusion text-[20px] font-bold tracking-wider text-dirt-80
+            group-hover:text-btn-primary-bg transition-colors
+            truncate max-w-[170px] text-right uppercase leading-tight
+          "
+        >
+          {username}
+        </span>
+        <span
+          data-testid="account-card-type-badge"
+          className={`
+            font-fusion text-[10px] font-medium tracking-tight mt-0.5
+            ${isMicrosoft ? 'text-emerald-700' : 'text-stone-60'}
+          `}
+        >
+          {isMicrosoft ? '[微软正版]' : '[离线]'}
+        </span>
       </div>
 
-      <div className="shrink-0 pl-2 text-stone-60 group-hover:text-btn-primary-bg font-fusion text-xs transition-colors">
-        ▼
+      {/* 像素头像方块 (对齐图二右侧方块) */}
+      <div className="shrink-0 transition-transform group-hover:scale-105">
+        <PixelAvatar
+          skinUrl={account?.skinUrl}
+          size={44}
+          className="border-2 border-border-hard shadow-[2px_2px_0_0_rgba(0,0,0,0.25)]"
+        />
       </div>
-    </button>
+    </div>
   );
 };
