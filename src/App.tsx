@@ -9,6 +9,7 @@ import { LaunchButtonGroup } from "./components/LaunchButtonGroup";
 import { LogView } from "./components/LogView";
 import { AccountCard } from "./components/AccountCard";
 import { AccountModal } from "./components/AccountModal";
+import { InitWizard } from "./components/InitWizard";
 import type { Account } from "./types/account";
 import { getActiveAccount, onAccountsChange } from "./utils/accountService";
 import type { LaunchState, LogEntry, MinecraftVersionInfo } from "./types/launcher";
@@ -23,9 +24,12 @@ import {
 import {
   getEffectiveJavaPath,
   loadLauncherSettings,
+  saveLauncherSettings,
+  syncLauncherSettingsFromConfig,
   onSettingsChange,
   scanSystemJavaRuntimes,
 } from "./utils/settingsStorage";
+import { getLauncherInitState } from "./utils/initService";
 import type { LauncherSettings, JavaRuntime } from "./types/settings";
 
 function App() {
@@ -39,6 +43,27 @@ function App() {
   const [javaRuntimes, setJavaRuntimes] = useState<JavaRuntime[]>([]);
   const [activeAccount, setActiveAccount] = useState<Account | null>(null);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [isInitialized, setIsInitialized] = useState<boolean | null>(null);
+
+  // Check launcher initialization state and synchronize settings
+  useEffect(() => {
+    getLauncherInitState()
+      .then((res) => {
+        setIsInitialized(res.initialized);
+        if (res.config && typeof res.config === 'object') {
+          syncLauncherSettingsFromConfig(res.config as Record<string, unknown>);
+          refreshVersions();
+        } else if (res.default_minecraft_dir) {
+          const current = loadLauncherSettings();
+          if (!current.gameDir || current.gameDir.includes('Default')) {
+            saveLauncherSettings({ ...current, gameDir: res.default_minecraft_dir });
+          }
+        }
+      })
+      .catch(() => {
+        setIsInitialized(true);
+      });
+  }, []);
 
   // Load and subscribe to active account
   useEffect(() => {
@@ -231,6 +256,23 @@ function App() {
   const handleClearLogs = () => {
     setLogs([]);
   };
+
+  if (isInitialized === false) {
+    return (
+      <main className="flex h-screen w-screen items-center justify-center overflow-hidden bg-surface-app-bg select-none">
+        <InitWizard
+          onComplete={() => {
+            setIsInitialized(true);
+            getActiveAccount().then((acc) => {
+              if (acc) setActiveAccount(acc);
+            });
+            refreshVersions();
+          }}
+        />
+        <WindowControls />
+      </main>
+    );
+  }
 
   return (
     <main

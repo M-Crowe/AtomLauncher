@@ -49,7 +49,7 @@ export const DEFAULT_SETTINGS: LauncherSettings = {
   fullscreen: false,
   jvmArgs: '-XX:+UseG1GC -XX:+UnlockExperimentalVMOptions',
 
-  gameDir: 'C:\\Users\\XuanY\\AppData\\Roaming\\.minecraft',
+  gameDir: 'C:\\Users\\Default\\AppData\\Roaming\\.minecraft',
   versionIsolation: true,
   scanSystemDirs: true,
   customDirs: [],
@@ -121,6 +121,75 @@ export function onSettingsChange(listener: SettingsChangeListener): () => void {
   };
 }
 
+export function syncLauncherSettingsFromConfig(config: Record<string, unknown>): LauncherSettings {
+  const current = loadLauncherSettings();
+  const updated: LauncherSettings = {
+    ...current,
+  };
+
+  if (typeof config.gameDir === 'string' && config.gameDir.trim()) {
+    updated.gameDir = config.gameDir.trim();
+  }
+  if (typeof config.selectedJavaId === 'string') {
+    updated.selectedJavaId = config.selectedJavaId;
+  }
+  if (typeof config.customJavaPath === 'string') {
+    updated.customJavaPath = config.customJavaPath;
+  }
+  if (typeof config.useCustomJava === 'boolean') {
+    updated.useCustomJava = config.useCustomJava;
+  }
+  if (typeof config.allocatedMemory === 'number' && config.allocatedMemory >= 1024) {
+    updated.allocatedMemory = config.allocatedMemory;
+  }
+  if (typeof config.minMemory === 'number' && config.minMemory >= 512) {
+    updated.minMemory = config.minMemory;
+  }
+  if (typeof config.downloadSource === 'string' && VALID_DOWNLOAD_SOURCES.includes(config.downloadSource as DownloadSource)) {
+    updated.downloadSource = config.downloadSource as DownloadSource;
+  }
+  if (typeof config.downloadThreads === 'number' && config.downloadThreads >= 2 && config.downloadThreads <= 64) {
+    updated.downloadThreads = config.downloadThreads;
+  }
+  if (typeof config.afterLaunch === 'string' && VALID_AFTER_LAUNCH.includes(config.afterLaunch as AfterLaunchBehavior)) {
+    updated.afterLaunch = config.afterLaunch as AfterLaunchBehavior;
+    updated.autoClose = config.afterLaunch === 'minimize';
+  }
+  if (Array.isArray(config.customDirs)) {
+    updated.customDirs = config.customDirs.filter((d): d is string => typeof d === 'string');
+  }
+  if (typeof config.versionIsolation === 'boolean') {
+    updated.versionIsolation = config.versionIsolation;
+  }
+  if (typeof config.scanSystemDirs === 'boolean') {
+    updated.scanSystemDirs = config.scanSystemDirs;
+  }
+  if (typeof config.selectedVersionId === 'string') {
+    updated.selectedVersionId = config.selectedVersionId;
+  }
+  if (typeof config.creeperEffects === 'boolean') {
+    updated.creeperEffects = config.creeperEffects;
+  }
+  if (typeof config.soundEffects === 'boolean') {
+    updated.soundEffects = config.soundEffects;
+  }
+  if (typeof config.jvmArgs === 'string') {
+    updated.jvmArgs = config.jvmArgs;
+  }
+  if (typeof config.windowWidth === 'number' && config.windowWidth >= 320) {
+    updated.windowWidth = config.windowWidth;
+  }
+  if (typeof config.windowHeight === 'number' && config.windowHeight >= 240) {
+    updated.windowHeight = config.windowHeight;
+  }
+  if (typeof config.fullscreen === 'boolean') {
+    updated.fullscreen = config.fullscreen;
+  }
+
+  saveLauncherSettings(updated);
+  return updated;
+}
+
 export function saveLauncherSettings(settings: LauncherSettings): void {
   if (typeof window === 'undefined' || !window.localStorage) return;
   try {
@@ -155,6 +224,15 @@ export function saveLauncherSettings(settings: LauncherSettings): void {
       autoClose: afterLaunch === 'minimize',
     };
     window.localStorage.setItem(SETTINGS_STORAGE_KEY, JSON.stringify(toSave));
+
+    // Also persist to .atom/config.json in Tauri backend
+    if (typeof window !== 'undefined' && ('__TAURI_INTERNALS__' in window || '__TAURI__' in window)) {
+      import('./initService').then(({ saveLauncherConfig }) => {
+        saveLauncherConfig(toSave as unknown as Record<string, unknown>).catch((e) =>
+          console.warn('Failed to save config.json:', e)
+        );
+      });
+    }
 
     // 通知所有已注册的设置变更监听器
     settingsListeners.forEach((listener) => {

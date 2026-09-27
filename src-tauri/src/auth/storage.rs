@@ -12,44 +12,71 @@ pub fn get_accounts_cache() -> &'static Arc<Mutex<AccountsStorage>> {
     ACCOUNTS_LOCK.get_or_init(|| Arc::new(Mutex::new(load_accounts_from_disk())))
 }
 
-pub fn get_accounts_file_path() -> PathBuf {
+pub fn reload_accounts_cache() {
+    if let Some(arc_mutex) = ACCOUNTS_LOCK.get() {
+        if let Ok(mut storage) = arc_mutex.lock() {
+            *storage = load_accounts_from_disk();
+        }
+    }
+}
+
+pub fn get_legacy_accounts_file_path() -> PathBuf {
     #[cfg(target_os = "windows")]
     {
-        if let Ok(app_data) = std::env::var("APPDATA") {
-            let atom_dir = PathBuf::from(app_data).join(".minecraft");
-            if !atom_dir.exists() {
-                let _ = fs::create_dir_all(&atom_dir);
-            }
-            return atom_dir.join("atom_accounts.json");
+        if let Ok(appdata) = std::env::var("APPDATA") {
+            return PathBuf::from(appdata).join(".minecraft").join("atom_accounts.json");
         }
     }
 
     #[cfg(target_os = "macos")]
     {
         if let Ok(home) = std::env::var("HOME") {
-            let atom_dir = PathBuf::from(home)
+            return PathBuf::from(home)
                 .join("Library")
                 .join("Application Support")
-                .join("minecraft");
-            if !atom_dir.exists() {
-                let _ = fs::create_dir_all(&atom_dir);
-            }
-            return atom_dir.join("atom_accounts.json");
+                .join("minecraft")
+                .join("atom_accounts.json");
         }
     }
 
     #[cfg(target_os = "linux")]
     {
         if let Ok(home) = std::env::var("HOME") {
-            let atom_dir = PathBuf::from(home).join(".minecraft");
-            if !atom_dir.exists() {
-                let _ = fs::create_dir_all(&atom_dir);
-            }
-            return atom_dir.join("atom_accounts.json");
+            return PathBuf::from(home).join(".minecraft").join("atom_accounts.json");
         }
     }
 
     PathBuf::from("atom_accounts.json")
+}
+
+pub fn get_accounts_file_path() -> PathBuf {
+    let atom_dir = crate::core::paths::get_atom_dir();
+    let target = atom_dir.join("accounts.json");
+
+    // Migration: If target does not exist, check if old atom_accounts.json or accounts.json exists
+    if !target.exists() {
+        let legacy = get_legacy_accounts_file_path();
+        if legacy.exists() {
+            if let Ok(content) = fs::read_to_string(&legacy) {
+                let _ = fs::create_dir_all(&atom_dir);
+                if fs::write(&target, content).is_ok() {
+                    let _ = fs::remove_file(&legacy);
+                }
+            }
+        } else if let Some(parent) = legacy.parent() {
+            let alt_legacy = parent.join("accounts.json");
+            if alt_legacy.exists() {
+                if let Ok(content) = fs::read_to_string(&alt_legacy) {
+                    let _ = fs::create_dir_all(&atom_dir);
+                    if fs::write(&target, content).is_ok() {
+                        let _ = fs::remove_file(&alt_legacy);
+                    }
+                }
+            }
+        }
+    }
+
+    target
 }
 
 pub fn load_accounts_from_disk() -> AccountsStorage {

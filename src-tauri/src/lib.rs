@@ -12,8 +12,9 @@ use auth::{
     poll_device_code_login, refresh_account_token, set_active_account, start_device_code_login,
 };
 use launcher::{
-    detect_java_environments, kill_minecraft_instance, launch_minecraft, scan_minecraft_versions,
-    verify_game_integrity,
+    detect_java_environments, get_atom_directory, get_launcher_init_state, kill_minecraft_instance,
+    launch_minecraft, load_launcher_config, pick_file, pick_folder, save_init_configuration,
+    save_launcher_config, scan_minecraft_versions, set_atom_directory, verify_game_integrity,
 };
 use plugin::{read_plugin_file, run_plugin_wasm};
 
@@ -67,7 +68,15 @@ pub fn run() {
             delete_account,
             start_device_code_login,
             poll_device_code_login,
-            refresh_account_token
+            refresh_account_token,
+            get_launcher_init_state,
+            save_init_configuration,
+            get_atom_directory,
+            set_atom_directory,
+            load_launcher_config,
+            save_launcher_config,
+            pick_folder,
+            pick_file
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

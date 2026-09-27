@@ -11,6 +11,7 @@ import {
   scanSystemJavaRuntimes,
   measureDownloadSourceLatency,
 } from '../utils/settingsStorage';
+import { getAtomDirectory, setAtomDirectory, pickFolder, pickFile } from '../utils/initService';
 
 import {
   type SettingsCategory,
@@ -409,6 +410,52 @@ export const SettingsView: React.FC = () => {
     showToast('已移除该目录');
   };
 
+  const [atomDir, setAtomDir] = useState<string>('');
+  useEffect(() => {
+    getAtomDirectory().then((dir) => setAtomDir(dir)).catch(() => {});
+  }, []);
+
+  const handleBrowseAtomDir = async () => {
+    const picked = await pickFolder(atomDir);
+    if (picked && picked !== atomDir) {
+      const updated = await setAtomDirectory(picked);
+      setAtomDir(updated);
+      showToast('已更新并迁移 .atom 存储位置');
+    }
+  };
+
+  const handleResetAtomDir = async () => {
+    const updated = await setAtomDirectory('');
+    setAtomDir(updated);
+    showToast('已恢复为默认便携 .atom 目录');
+  };
+
+  const handleBrowseGameDir = async () => {
+    const picked = await pickFolder(settings.gameDir);
+    if (picked) {
+      setSettings((s) => ({ ...s, gameDir: picked }));
+      showToast('已更新游戏主目录');
+    }
+  };
+
+  const handleBrowseCustomJava = async () => {
+    const picked = await pickFile('选择 Java 可执行文件 (javaw.exe)', 'javaw.exe;java.exe;*.exe');
+    if (picked) {
+      setSettings((s) => ({ ...s, customJavaPath: picked, useCustomJava: true }));
+      showToast('已选择 Java 执行程序');
+    }
+  };
+
+  const handleBrowseCustomDir = async () => {
+    const picked = await pickFolder();
+    if (picked) {
+      if (!settings.customDirs?.includes(picked)) {
+        setSettings((s) => ({ ...s, customDirs: [...(s.customDirs || []), picked] }));
+        showToast('已添加自定义扫描目录');
+      }
+    }
+  };
+
   // 获取当前生效的 Java 路径展示
   const currentJava = runtimes.find((r) => r.id === settings.selectedJavaId) || runtimes[0];
   const effectiveJavaPath = settings.useCustomJava
@@ -554,6 +601,14 @@ export const SettingsView: React.FC = () => {
                   >
                     指定路径
                   </button>
+                  <button
+                    type="button"
+                    data-testid="settings-custom-java-browse-button"
+                    onClick={handleBrowseCustomJava}
+                    className="px-3.5 py-2 bg-stone-20 hover:bg-stone-30 text-[#1F1F1F] text-[12px] font-bold ring-1 ring-inset ring-[#A8988A] cursor-pointer transition-colors"
+                  >
+                    浏览
+                  </button>
                 </div>
               </div>
 
@@ -661,7 +716,8 @@ export const SettingsView: React.FC = () => {
                   />
                   <button
                     type="button"
-                    onClick={() => showToast('已选择当前游戏目录')}
+                    data-testid="settings-game-dir-browse-button"
+                    onClick={handleBrowseGameDir}
                     className="px-3.5 py-2 bg-[#2E5E1C] hover:bg-[#3D7726] active:bg-[#1B3B11] text-white text-[12px] font-bold ring-2 ring-inset ring-[#1B3B11] shadow-[1px_1px_0_0_#1B3B11] cursor-pointer transition-colors"
                   >
                     浏览
@@ -716,6 +772,14 @@ export const SettingsView: React.FC = () => {
                     className="px-3 py-1.5 bg-[#2E5E1C] hover:bg-[#3D7726] text-white text-[11px] font-bold ring-1 ring-[#1B3B11] cursor-pointer"
                   >
                     添加目录
+                  </button>
+                  <button
+                    type="button"
+                    data-testid="browse-custom-dir-button"
+                    onClick={handleBrowseCustomDir}
+                    className="px-3 py-1.5 bg-stone-20 hover:bg-stone-30 text-[#1F1F1F] text-[11px] font-bold ring-1 ring-[#A8988A] cursor-pointer"
+                  >
+                    浏览
                   </button>
                 </div>
 
@@ -1064,6 +1128,56 @@ export const SettingsView: React.FC = () => {
                     className="h-4.5 w-4.5 accent-[#2E5E1C] cursor-pointer"
                   />
                 </label>
+              </div>
+            </section>
+
+            {/* .atom 数据目录配置 */}
+            <section className="p-5 bg-white/70 ring-2 ring-inset ring-surface-slot flex flex-col gap-4 shadow-sm">
+              <div className="flex items-center justify-between pb-2 border-b-2 border-dirt-40/40">
+                <div className="flex items-center gap-2">
+                  <h3 className="font-bold text-[#1F1F1F] text-[14px]">.atom 启动器核心数据目录</h3>
+                  <span className="text-[10px] px-2 py-0.5 bg-[#2E5E1C] text-white font-bold rounded">
+                    绿色便携
+                  </span>
+                </div>
+                <button
+                  type="button"
+                  data-testid="settings-atom-reset-button"
+                  onClick={handleResetAtomDir}
+                  className="text-[11px] text-[#2E5E1C] font-bold hover:underline cursor-pointer"
+                >
+                  恢复便携默认目录
+                </button>
+              </div>
+
+              <div className="flex flex-col gap-2">
+                <div className="flex gap-2.5 items-center">
+                  <input
+                    type="text"
+                    data-testid="settings-atom-dir-input"
+                    value={atomDir}
+                    onChange={(e) => setAtomDir(e.target.value)}
+                    onBlur={async () => {
+                      if (atomDir.trim()) {
+                        const updated = await setAtomDirectory(atomDir.trim());
+                        setAtomDir(updated);
+                        showToast('已更新 .atom 存储位置');
+                      }
+                    }}
+                    className="flex-1 bg-white px-3 py-2 ring-1 ring-inset ring-[#A8988A] focus:ring-2 focus:ring-[#2E5E1C] text-[12px] text-[#1F1F1F] font-mono outline-none"
+                  />
+                  <button
+                    type="button"
+                    data-testid="settings-atom-browse-button"
+                    onClick={handleBrowseAtomDir}
+                    className="px-3.5 py-2 bg-[#2E5E1C] hover:bg-[#3D7726] active:bg-[#1B3B11] text-white text-[12px] font-bold ring-2 ring-inset ring-[#1B3B11] shadow-[1px_1px_0_0_#1B3B11] cursor-pointer"
+                  >
+                    浏览
+                  </button>
+                </div>
+                <span className="text-[11px] text-[#2F1F17]">
+                  存储 config.json、accounts.json、logs/ 及 plugins/。修改后将写入 .atom_path 指针文件进行实时重定向。
+                </span>
               </div>
             </section>
           </div>

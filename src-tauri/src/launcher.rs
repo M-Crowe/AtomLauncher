@@ -1,8 +1,10 @@
+pub mod init;
 pub mod java;
 pub mod process;
 pub mod scanner;
 pub mod types;
 
+pub use init::*;
 pub use java::{detect_java_environments, get_java_info_from_executable, scan_java_in_directory};
 pub use process::{
     format_elapsed_time, get_process_map, kill_minecraft_instance, launch_minecraft,
