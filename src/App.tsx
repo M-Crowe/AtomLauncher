@@ -7,6 +7,10 @@ import { SettingsView, SettingsSidebar } from "./components/SettingsView";
 import { ToolsView } from "./components/ToolsView";
 import { LaunchButtonGroup } from "./components/LaunchButtonGroup";
 import { LogView } from "./components/LogView";
+import { AccountCard } from "./components/AccountCard";
+import { AccountModal } from "./components/AccountModal";
+import type { Account } from "./types/account";
+import { getActiveAccount, onAccountsChange } from "./utils/accountService";
 import type { LaunchState, LogEntry, MinecraftVersionInfo } from "./types/launcher";
 import {
   killMinecraftInstance,
@@ -33,6 +37,20 @@ function App() {
   const [versions, setVersions] = useState<MinecraftVersionInfo[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string>("1.20.4");
   const [javaRuntimes, setJavaRuntimes] = useState<JavaRuntime[]>([]);
+  const [activeAccount, setActiveAccount] = useState<Account | null>(null);
+  const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+
+  // Load and subscribe to active account
+  useEffect(() => {
+    getActiveAccount().then((acc) => {
+      if (acc) setActiveAccount(acc);
+    });
+    const unsub = onAccountsChange((accounts) => {
+      const active = accounts.find((a) => a.isActive);
+      if (active) setActiveAccount(active);
+    });
+    return unsub;
+  }, []);
 
   // Scan Java environments on mount
   useEffect(() => {
@@ -159,6 +177,12 @@ function App() {
 
     setLaunchState("launching");
     try {
+      const userType = activeAccount?.accountType === "microsoft" ? "msa" : "mojang";
+      const xuid = activeAccount?.xuid || "0";
+      const username = activeAccount?.name || "Player";
+      const uuid = activeAccount?.uuid || "00000000-0000-0000-0000-000000000000";
+      const accessToken = activeAccount?.accessToken || "00000000000000000000000000000000";
+
       const result = await launchMinecraft({
         versionId: selectedVersionId,
         gameDir: targetGameDir,
@@ -170,6 +194,11 @@ function App() {
         windowWidth: s.windowWidth,
         windowHeight: s.windowHeight,
         versionIsolation: s.versionIsolation,
+        username,
+        uuid,
+        accessToken,
+        userType,
+        xuid,
       });
 
       setRunningPid(result.pid);
@@ -240,7 +269,13 @@ function App() {
                 <span className="text-dirt-80"> LAUNCHER</span>
               </h1>
             </div>
-            <div></div>
+            {/* 右上角账户卡片 (网格第1行第2列 277px 顶部区域) */}
+            <div className="h-full w-full flex items-center justify-end">
+              <AccountCard
+                account={activeAccount}
+                onClick={() => setIsAccountModalOpen(true)}
+              />
+            </div>
 
             {/* 主内容视图区域 (三页面受控视图) */}
             <div className="h-full w-full border-10 border-grass-80 rounded overflow-hidden relative">
@@ -423,6 +458,12 @@ function App() {
           </span>
         </button>
       )}
+
+      <AccountModal
+        isOpen={isAccountModalOpen}
+        onClose={() => setIsAccountModalOpen(false)}
+        onAccountSwitched={(acc) => setActiveAccount(acc)}
+      />
 
       <WindowControls />
     </main>

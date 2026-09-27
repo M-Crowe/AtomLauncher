@@ -33,6 +33,10 @@ export interface LaunchOptions {
   windowHeight?: number;
   versionIsolation?: boolean;
   username?: string;
+  uuid?: string;
+  accessToken?: string;
+  userType?: string;
+  xuid?: string;
 }
 
 export interface LaunchResult {

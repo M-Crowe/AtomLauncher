@@ -36,8 +36,13 @@ fn run_plugin_wasm(
     Ok(res)
 }
 
+pub mod auth;
 pub mod core;
 pub mod launcher;
+use auth::{
+    create_offline_account, delete_account, get_accounts, get_active_account,
+    poll_device_code_login, refresh_account_token, set_active_account, start_device_code_login,
+};
 use launcher::{
     detect_java_environments, kill_minecraft_instance, launch_minecraft, scan_minecraft_versions,
     verify_game_integrity,
@@ -80,7 +85,15 @@ pub fn run() {
             detect_java_environments,
             verify_game_integrity,
             launch_minecraft,
-            kill_minecraft_instance
+            kill_minecraft_instance,
+            get_accounts,
+            get_active_account,
+            create_offline_account,
+            set_active_account,
+            delete_account,
+            start_device_code_login,
+            poll_device_code_login,
+            refresh_account_token
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

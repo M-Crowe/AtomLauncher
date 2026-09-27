@@ -47,6 +47,10 @@ pub struct LaunchOptions {
     pub window_height: Option<u32>,
     pub version_isolation: Option<bool>,
     pub username: Option<String>,
+    pub uuid: Option<String>,
+    pub access_token: Option<String>,
+    pub user_type: Option<String>,
+    pub xuid: Option<String>,
 }
 
 #[derive(Debug, Clone, Serialize, Deserialize)]
@@ -675,15 +679,45 @@ pub fn launch_minecraft(
         game_dir.clone()
     };
 
-    let username = options.username.unwrap_or_else(|| "Player".to_string());
+    // 3. 真实账号解析与 Token 自动续期（离线 / 微软正版）
+    let mut username = options.username.clone().unwrap_or_default();
+    let mut uuid = options.uuid.clone().unwrap_or_default();
+    let mut access_token = options.access_token.clone().unwrap_or_default();
+    let mut user_type = options.user_type.clone().unwrap_or_else(|| "mojang".to_string());
+    let mut xuid = options.xuid.clone().unwrap_or_else(|| "0".to_string());
+
+    if username.is_empty() || uuid.is_empty() || access_token.is_empty() {
+        if let Ok(Some(mut active_acc)) = crate::auth::get_active_account() {
+            if active_acc.account_type == crate::auth::AccountType::Microsoft {
+                let _ = crate::auth::refresh_microsoft_token_if_needed(&mut active_acc);
+                user_type = "msa".to_string();
+                xuid = active_acc.xuid.clone().unwrap_or_else(|| "0".to_string());
+            } else {
+                user_type = "mojang".to_string();
+                xuid = "0".to_string();
+            }
+            username = active_acc.name;
+            uuid = active_acc.uuid;
+            access_token = active_acc.access_token;
+        } else {
+            username = "Player".to_string();
+            uuid = "00000000-0000-0000-0000-000000000000".to_string();
+            access_token = "00000000000000000000000000000000".to_string();
+            user_type = "mojang".to_string();
+            xuid = "0".to_string();
+        }
+    }
+
     let (jvm_flags, game_flags) = crate::core::build_launch_arguments(
         &meta,
         &game_dir,
         &work_dir,
         meta.java_major_version,
         &username,
-        "00000000-0000-0000-0000-000000000000",
-        "00000000000000000000000000000000",
+        &uuid,
+        &access_token,
+        &user_type,
+        &xuid,
         options.window_width,
         options.window_height,
         options.fullscreen.unwrap_or(false),

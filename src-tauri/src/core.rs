@@ -442,6 +442,8 @@ pub fn build_launch_arguments(
     username: &str,
     uuid: &str,
     access_token: &str,
+    user_type: &str,
+    xuid: &str,
     window_width: Option<u32>,
     window_height: Option<u32>,
     fullscreen: bool,
@@ -567,10 +569,10 @@ pub fn build_launch_arguments(
                 replaced = replaced.replace("${assets_index_name}", &meta.assets_index);
                 replaced = replaced.replace("${auth_uuid}", uuid);
                 replaced = replaced.replace("${auth_access_token}", access_token);
-                replaced = replaced.replace("${user_type}", "mojang");
+                replaced = replaced.replace("${user_type}", user_type);
                 replaced = replaced.replace("${version_type}", "AtomLauncher");
                 replaced = replaced.replace("${clientid}", uuid);
-                replaced = replaced.replace("${auth_xuid}", "0");
+                replaced = replaced.replace("${auth_xuid}", xuid);
                 replaced = replaced.replace("${resolution_width}", &width_str);
                 replaced = replaced.replace("${resolution_height}", &height_str);
 
@@ -597,7 +599,9 @@ pub fn build_launch_arguments(
         game_args.push("--accessToken".to_string());
         game_args.push(access_token.to_string());
         game_args.push("--userType".to_string());
-        game_args.push("mojang".to_string());
+        game_args.push(user_type.to_string());
+        game_args.push("--xuid".to_string());
+        game_args.push(xuid.to_string());
         game_args.push("--versionType".to_string());
         game_args.push("AtomLauncher".to_string());
     }
