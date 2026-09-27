@@ -40,7 +40,14 @@ test('Account R1. Top-right placement in App.tsx grid layout', () => {
 });
 
 test('Account R2. Microsoft Azure Client ID & OAuth2 chain constants in Rust backend', () => {
-  const authRs = readFileSync(resolve('src-tauri/src/auth.rs'), 'utf-8');
+  const authFiles = [
+    resolve('src-tauri/src/auth.rs'),
+    resolve('src-tauri/src/auth/microsoft.rs'),
+    resolve('src-tauri/src/auth/xbox.rs'),
+    resolve('src-tauri/src/auth/offline.rs'),
+    resolve('src-tauri/src/auth/storage.rs'),
+  ];
+  const authRs = authFiles.map(f => readFileSync(f, 'utf-8')).join('\n');
 
   // 微软 Azure Client ID 验证
   assert.ok(
@@ -66,8 +73,17 @@ test('Account R2. Microsoft Azure Client ID & OAuth2 chain constants in Rust bac
 });
 
 test('Account R2. Launch Argument Injection eliminates AuthLib 401 errors', () => {
-  const launcherRs = readFileSync(resolve('src-tauri/src/launcher.rs'), 'utf-8');
-  const coreRs = readFileSync(resolve('src-tauri/src/core.rs'), 'utf-8');
+  const launcherFiles = [
+    resolve('src-tauri/src/launcher.rs'),
+    resolve('src-tauri/src/launcher/process.rs'),
+  ];
+  const launcherRs = launcherFiles.map(f => readFileSync(f, 'utf-8')).join('\n');
+
+  const coreFiles = [
+    resolve('src-tauri/src/core.rs'),
+    resolve('src-tauri/src/core/args.rs'),
+  ];
+  const coreRs = coreFiles.map(f => readFileSync(f, 'utf-8')).join('\n');
   const appContent = readFileSync(resolve('src/App.tsx'), 'utf-8');
 
   // Rust 后端与核心构建参数验证

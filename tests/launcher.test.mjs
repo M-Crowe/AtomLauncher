@@ -119,14 +119,26 @@ test('R1 & R3. App integration: dual launch button, log status indicator, instan
 });
 
 test('Rust backend launcher and core engine source code checks', () => {
-  const launcherRs = readFileSync(resolve('src-tauri/src/launcher.rs'), 'utf-8');
+  const launcherFiles = [
+    resolve('src-tauri/src/launcher.rs'),
+    resolve('src-tauri/src/launcher/scanner.rs'),
+    resolve('src-tauri/src/launcher/java.rs'),
+    resolve('src-tauri/src/launcher/process.rs'),
+  ];
+  const launcherRs = launcherFiles.map(f => readFileSync(f, 'utf-8')).join('\n');
   assert.ok(launcherRs.includes('pub fn scan_minecraft_versions'), 'Rust exports scan_minecraft_versions command');
   assert.ok(launcherRs.includes('pub fn detect_java_environments'), 'Rust exports detect_java_environments command');
   assert.ok(launcherRs.includes('pub fn verify_game_integrity'), 'Rust exports verify_game_integrity command');
   assert.ok(launcherRs.includes('pub fn launch_minecraft'), 'Rust exports launch_minecraft command');
   assert.ok(launcherRs.includes('pub fn kill_minecraft_instance'), 'Rust exports kill_minecraft_instance command');
 
-  const coreRs = readFileSync(resolve('src-tauri/src/core.rs'), 'utf-8');
+  const coreFiles = [
+    resolve('src-tauri/src/core.rs'),
+    resolve('src-tauri/src/core/resolver.rs'),
+    resolve('src-tauri/src/core/integrity.rs'),
+    resolve('src-tauri/src/core/args.rs'),
+  ];
+  const coreRs = coreFiles.map(f => readFileSync(f, 'utf-8')).join('\n');
   assert.ok(coreRs.includes('pub fn resolve_version_meta'), 'core.rs exports resolve_version_meta');
   assert.ok(coreRs.includes('pub fn check_game_integrity'), 'core.rs exports check_game_integrity');
   assert.ok(coreRs.includes('pub fn build_launch_arguments'), 'core.rs exports build_launch_arguments');
