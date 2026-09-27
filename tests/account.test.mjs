@@ -42,10 +42,10 @@ test('Account R1. Top-right placement in App.tsx grid layout', () => {
 test('Account R2. Microsoft Azure Client ID & OAuth2 chain constants in Rust backend', () => {
   const authRs = readFileSync(resolve('src-tauri/src/auth.rs'), 'utf-8');
 
-  // 微软 Azure Client ID 验证
+  // 微软公共授权客户端验证
   assert.ok(
-    authRs.includes('37c03091-93d8-4297-a59c-f3792cc080e0'),
-    'Matches Azure Client ID: 37c03091-93d8-4297-a59c-f3792cc080e0'
+    authRs.includes('00000000402b5328'),
+    'Matches Minecraft official whitelisted Client ID: 00000000402b5328'
   );
 
   // 微软认证链端点验证

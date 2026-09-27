@@ -4,7 +4,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub const MS_CLIENT_ID: &str = "37c03091-93d8-4297-a59c-f3792cc080e0";
+pub const MS_CLIENT_ID: &str = "00000000402b5328";
+pub const MS_SCOPE: &str = "service::user.auth.xboxlive.com::MBI_SSL";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -183,7 +184,7 @@ pub fn start_device_code_login() -> Result<DeviceCodeResponse, String> {
         .post("https://login.microsoftonline.com/consumers/oauth2/v2.0/devicecode")
         .form(&[
             ("client_id", MS_CLIENT_ID),
-            ("scope", "XboxLive.signin offline_access"),
+            ("scope", MS_SCOPE),
         ])
         .send()
         .map_err(|e| format!("请求设备验证码失败: {e} (请检查网络连接)"))?;
@@ -503,7 +504,7 @@ pub fn refresh_microsoft_token_if_needed(account: &mut Account) -> Result<bool, 
             ("grant_type", "refresh_token"),
             ("client_id", MS_CLIENT_ID),
             ("refresh_token", refresh_token),
-            ("scope", "XboxLive.signin offline_access"),
+            ("scope", MS_SCOPE),
         ])
         .send()
         .map_err(|e| format!("请求微软 Token 续期失败: {e}"))?;
@@ -652,7 +653,8 @@ mod tests {
 
     #[test]
     fn test_ms_client_id_constant() {
-        assert_eq!(MS_CLIENT_ID, "37c03091-93d8-4297-a59c-f3792cc080e0");
+        assert_eq!(MS_CLIENT_ID, "00000000402b5328");
+        assert_eq!(MS_SCOPE, "service::user.auth.xboxlive.com::MBI_SSL");
     }
 
     #[test]
