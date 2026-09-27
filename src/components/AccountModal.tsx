@@ -33,7 +33,8 @@ export const AccountModal: React.FC<AccountModalProps> = ({
   const [msLoginStatus, setMsLoginStatus] = useState<string>('');
   const [isPollingMs, setIsPollingMs] = useState(false);
   const [copiedCode, setCopiedCode] = useState(false);
-  const pollTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const pollTimerRef = useRef<ReturnType<typeof setTimeout> | null>(null);
+  const activePollIdRef = useRef<number>(0);
 
   const refreshList = async () => {
     const list = await getAccounts();
@@ -50,8 +51,9 @@ export const AccountModal: React.FC<AccountModalProps> = ({
       setMsLoginStatus('');
     }
     return () => {
+      activePollIdRef.current += 1;
       if (pollTimerRef.current) {
-        clearInterval(pollTimerRef.current);
+        clearTimeout(pollTimerRef.current);
         pollTimerRef.current = null;
       }
     };
@@ -59,9 +61,12 @@ export const AccountModal: React.FC<AccountModalProps> = ({
 
   // Clean up polling timer on unmount or view change
   useEffect(() => {
-    if (view !== 'add-microsoft' && pollTimerRef.current) {
-      clearInterval(pollTimerRef.current);
-      pollTimerRef.current = null;
+    if (view !== 'add-microsoft') {
+      activePollIdRef.current += 1;
+      if (pollTimerRef.current) {
+        clearTimeout(pollTimerRef.current);
+        pollTimerRef.current = null;
+      }
       setIsPollingMs(false);
     }
   }, [view]);
@@ -113,49 +118,75 @@ export const AccountModal: React.FC<AccountModalProps> = ({
     }
   };
 
-  // Microsoft Device Code Login Flow
+  // Microsoft Device Code Login Flow (Safe Sequential Polling)
   const handleStartMicrosoftLogin = async () => {
     setView('add-microsoft');
     setMsLoginStatus('正在向微软请求设备授权码...');
     setIsPollingMs(true);
     setCopiedCode(false);
 
+    activePollIdRef.current += 1;
+    const currentPollId = activePollIdRef.current;
+
+    if (pollTimerRef.current) {
+      clearTimeout(pollTimerRef.current);
+      pollTimerRef.current = null;
+    }
+
     try {
       const data = await startDeviceCodeLogin();
+      if (activePollIdRef.current !== currentPollId) return;
+
       setDeviceCodeData(data);
       setMsLoginStatus('等待浏览器中完成授权...');
 
-      // Start interval polling
-      const pollInterval = Math.max((data.interval || 5) * 1000, 3000);
-      if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+      const pollInterval = Math.max((data.interval || 5) * 1000, 3500);
 
-      pollTimerRef.current = setInterval(async () => {
+      const pollStep = async () => {
+        if (activePollIdRef.current !== currentPollId) return;
+
         try {
           const pollRes = await pollDeviceCodeLogin(data.deviceCode);
+          if (activePollIdRef.current !== currentPollId) return;
+
           if (pollRes.status === 'success' && pollRes.account) {
-            if (pollTimerRef.current) clearInterval(pollTimerRef.current);
             setIsPollingMs(false);
             setMsLoginStatus('微软正版账号验证成功！');
             await refreshList();
             onAccountSwitched?.(pollRes.account);
             setTimeout(() => {
-              setView('list');
+              if (activePollIdRef.current === currentPollId) {
+                setView('list');
+              }
             }, 1200);
-          } else if (pollRes.status === 'expired') {
-            if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+            return;
+          }
+
+          if (pollRes.status === 'expired') {
             setIsPollingMs(false);
             setMsLoginStatus('设备授权码已过期，请重新尝试');
-          } else if (pollRes.status === 'error') {
-            if (pollTimerRef.current) clearInterval(pollTimerRef.current);
+            return;
+          }
+
+          if (pollRes.status === 'error') {
             setIsPollingMs(false);
             setMsLoginStatus(pollRes.message || '授权过程中出现错误');
-          } else {
-            setMsLoginStatus(pollRes.message || '等待微软网页授权中...');
+            return;
           }
+
+          // Still pending, schedule next sequential tick
+          setMsLoginStatus(pollRes.message || '等待微软网页授权中...');
+          pollTimerRef.current = setTimeout(pollStep, pollInterval);
         } catch (pollErr) {
           console.error('Polling error:', pollErr);
+          if (activePollIdRef.current === currentPollId) {
+            pollTimerRef.current = setTimeout(pollStep, pollInterval);
+          }
         }
-      }, pollInterval);
+      };
+
+      // Start initial poll after 1 interval
+      pollTimerRef.current = setTimeout(pollStep, pollInterval);
     } catch (err) {
       setMsLoginStatus(`获取微软设备码失败: ${String(err)}`);
       setIsPollingMs(false);

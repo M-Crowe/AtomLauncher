@@ -411,6 +411,19 @@ pub fn poll_device_code_login(device_code: String) -> Result<DeviceCodePollResul
             }
             _ => {
                 let desc = json.get("error_description").and_then(|d| d.as_str()).unwrap_or(err);
+                if desc.contains("already been used") || desc.contains("AADSTS70000") {
+                    let cache = get_accounts_cache();
+                    let storage = cache.lock().unwrap();
+                    if let Some(active_id) = &storage.active_account_id {
+                        if let Some(acc) = storage.accounts.iter().find(|a| a.id == *active_id && a.account_type == AccountType::Microsoft) {
+                            return Ok(DeviceCodePollResult {
+                                status: "success".to_string(),
+                                message: Some("微软正版账号验证成功！".to_string()),
+                                account: Some(acc.clone()),
+                            });
+                        }
+                    }
+                }
                 return Ok(DeviceCodePollResult {
                     status: "error".to_string(),
                     message: Some(format!("授权失败: {desc}")),
