@@ -46,13 +46,14 @@ test('Account R2. Microsoft Azure Client ID & OAuth2 chain constants in Rust bac
     resolve('src-tauri/src/auth/xbox.rs'),
     resolve('src-tauri/src/auth/offline.rs'),
     resolve('src-tauri/src/auth/storage.rs'),
+    resolve('src-tauri/src/auth/types.rs'),
   ];
   const authRs = authFiles.map(f => readFileSync(f, 'utf-8')).join('\n');
 
-  // 微软 Azure Client ID 验证
+  // Prism Launcher Azure Client ID 验证
   assert.ok(
-    authRs.includes('37c03091-93d8-4297-a59c-f3792cc080e0'),
-    'Matches Azure Client ID: 37c03091-93d8-4297-a59c-f3792cc080e0'
+    authRs.includes('c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb'),
+    'Matches Prism Launcher Azure Client ID: c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb'
   );
 
   // 微软认证链端点验证
@@ -60,8 +61,9 @@ test('Account R2. Microsoft Azure Client ID & OAuth2 chain constants in Rust bac
   assert.ok(authRs.includes('https://login.microsoftonline.com/consumers/oauth2/v2.0/token'), 'Token endpoint');
   assert.ok(authRs.includes('https://user.auth.xboxlive.com/user/authenticate'), 'Xbox Live auth endpoint');
   assert.ok(authRs.includes('https://xsts.auth.xboxlive.com/xsts/authorize'), 'XSTS auth endpoint');
-  assert.ok(authRs.includes('https://api.minecraftservices.com/authentication/login_with_xbox'), 'Minecraft login endpoint');
+  assert.ok(authRs.includes('https://api.minecraftservices.com/launcher/login'), 'Minecraft launcher login endpoint (Prism style)');
   assert.ok(authRs.includes('https://api.minecraftservices.com/minecraft/profile'), 'Minecraft profile endpoint');
+  assert.ok(authRs.includes('https://api.minecraftservices.com/entitlements/license'), 'Entitlements license check endpoint');
 
   // 验证离线账号与正版账号管理命令导出
   assert.ok(authRs.includes('pub fn start_device_code_login'), 'Exports start_device_code_login');

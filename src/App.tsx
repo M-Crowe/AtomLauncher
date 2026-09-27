@@ -122,14 +122,7 @@ function App() {
     let unlistenExit: (() => void) | undefined;
     let unlistenStarted: (() => void) | undefined;
 
-    let pendingLogs: Array<{
-      id: string;
-      pid: number;
-      line: string;
-      level: string;
-      timestamp: string;
-      isError: boolean;
-    }> = [];
+    let pendingLogs: LogEntry[] = [];
     let flushTimeout: ReturnType<typeof setTimeout> | null = null;
 
     const flushLogs = () => {
@@ -302,7 +295,7 @@ function App() {
       <div
         className="
         bg-surface-card ring-4 ring-inset ring-border-hard
-        h-full w-full 
+        h-full w-full
         relative
         overflow-hidden
         "
@@ -316,7 +309,7 @@ function App() {
           {/* 面板 1: 主启动器界面 */}
           <div
             className="
-            min-w-full w-full h-full 
+            min-w-full w-full h-full
             grid
             grid-cols-[minmax(0,1fr)_277px]
             grid-rows-[70px_minmax(0,1fr)_78px]
@@ -355,7 +348,7 @@ function App() {
             <div
               className="
               relative h-full w-full
-              ring-2 ring-inset ring-surface-slot 
+              ring-2 ring-inset ring-surface-slot
               shadow-[4px_2px_0_0_var(--color-redstone-100)]
               overflow-hidden bg-surface-card
               "

@@ -1,7 +1,9 @@
 use serde::{Deserialize, Serialize};
 
-pub const MS_CLIENT_ID: &str = "37c03091-93d8-4297-a59c-f3792cc080e0";
-pub const MS_SCOPE: &str = "XboxLive.signin offline_access";
+/// Prism Launcher 的 Azure Client ID (公开应用标识，非机密凭证)
+/// 来源: https://github.com/PrismLauncher/PrismLauncher CMakeLists.txt -> Launcher_MSA_CLIENT_ID
+pub const MS_CLIENT_ID: &str = "c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb";
+pub const MS_SCOPE: &str = "XboxLive.SignIn XboxLive.offline_access";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
