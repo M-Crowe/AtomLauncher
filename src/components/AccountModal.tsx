@@ -179,9 +179,8 @@ export const AccountModal: React.FC<AccountModalProps> = ({
           pollTimerRef.current = setTimeout(pollStep, pollInterval);
         } catch (pollErr) {
           console.error('Polling error:', pollErr);
-          if (activePollIdRef.current === currentPollId) {
-            pollTimerRef.current = setTimeout(pollStep, pollInterval);
-          }
+          setIsPollingMs(false);
+          setMsLoginStatus(`请求异常: ${String(pollErr)}`);
         }
       };
 

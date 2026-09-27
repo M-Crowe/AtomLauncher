@@ -437,7 +437,17 @@ pub fn poll_device_code_login(device_code: String) -> Result<DeviceCodePollResul
     let ms_refresh_token = json["refresh_token"].as_str();
 
     // 成功获取微软 Token，执行后续 Xbox/Minecraft 验证链
-    let account = execute_microsoft_chain(ms_access_token, ms_refresh_token)?;
+    let account = match execute_microsoft_chain(ms_access_token, ms_refresh_token) {
+        Ok(acc) => acc,
+        Err(e) => {
+            eprintln!("[Microsoft Auth 验证链异常]: {e}");
+            return Ok(DeviceCodePollResult {
+                status: "error".to_string(),
+                message: Some(format!("正版验证失败: {e}")),
+                account: None,
+            });
+        }
+    };
 
     // 存入全局账号列表并持久化
     let cache = get_accounts_cache();
