@@ -4,8 +4,8 @@ use std::path::PathBuf;
 use std::sync::{Arc, Mutex, OnceLock};
 use std::time::{SystemTime, UNIX_EPOCH};
 
-pub const MS_CLIENT_ID: &str = "00000000402b5328";
-pub const MS_SCOPE: &str = "service::user.auth.xboxlive.com::MBI_SSL";
+pub const MS_CLIENT_ID: &str = "37c03091-93d8-4297-a59c-f3792cc080e0";
+pub const MS_SCOPE: &str = "XboxLive.signin offline_access";
 
 #[derive(Debug, Clone, Serialize, Deserialize, PartialEq)]
 #[serde(rename_all = "camelCase")]
@@ -653,8 +653,8 @@ mod tests {
 
     #[test]
     fn test_ms_client_id_constant() {
-        assert_eq!(MS_CLIENT_ID, "00000000402b5328");
-        assert_eq!(MS_SCOPE, "service::user.auth.xboxlive.com::MBI_SSL");
+        assert_eq!(MS_CLIENT_ID, "37c03091-93d8-4297-a59c-f3792cc080e0");
+        assert_eq!(MS_SCOPE, "XboxLive.signin offline_access");
     }
 
     #[test]
