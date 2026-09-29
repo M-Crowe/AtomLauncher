@@ -12,6 +12,7 @@ import {
   measureDownloadSourceLatency,
 } from '../utils/settingsStorage';
 import { getAtomDirectory, setAtomDirectory, pickFolder, pickFile } from '../utils/initService';
+import { VersionDownloadModal } from './VersionDownloadModal';
 
 import {
   type SettingsCategory,
@@ -232,6 +233,7 @@ export const SettingsView: React.FC = () => {
   });
   const [isTestingPing, setIsTestingPing] = useState(false);
   const [newCustomDir, setNewCustomDir] = useState('');
+  const [isDownloaderModalOpen, setIsDownloaderModalOpen] = useState(false);
 
   const isMountedRef = useRef(true);
   const toastTimeoutRef = useRef<ReturnType<typeof setTimeout> | null>(null);
@@ -1042,6 +1044,21 @@ export const SettingsView: React.FC = () => {
                   );
                 })}
               </div>
+
+              <div className="pt-3 border-t border-dirt-40/30 flex items-center justify-between">
+                <div className="flex flex-col">
+                  <span className="font-bold text-[#1F1F1F] text-[12px]">版本下载引擎与依赖补全</span>
+                  <span className="text-[11px] text-[#2F1F17]">使用当前镜像源快速下载并安装 Minecraft 官方及快照版本</span>
+                </div>
+                <button
+                  type="button"
+                  data-testid="settings-open-downloader-button"
+                  onClick={() => setIsDownloaderModalOpen(true)}
+                  className="px-3.5 py-1.5 bg-[#2E5E1C] hover:bg-[#1B3B11] text-white font-bold text-[12px] ring-1 ring-[#1B3B11] shadow-[2px_2px_0_0_#1B3B11] cursor-pointer"
+                >
+                  打开版本下载器
+                </button>
+              </div>
             </section>
 
             {/* 并发下载线程数与自动重试 */}
@@ -1235,6 +1252,11 @@ export const SettingsView: React.FC = () => {
           </div>
         )}
       </div>
+
+      <VersionDownloadModal
+        isOpen={isDownloaderModalOpen}
+        onClose={() => setIsDownloaderModalOpen(false)}
+      />
     </div>
   );
 };

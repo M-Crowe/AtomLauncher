@@ -16,6 +16,11 @@ use launcher::{
     launch_minecraft, load_launcher_config, pick_file, pick_folder, save_init_configuration,
     save_launcher_config, scan_minecraft_versions, set_atom_directory, verify_game_integrity,
 };
+use core::{
+    download_asset_objects, download_missing_libraries, fetch_version_detail,
+    fetch_version_manifest, infer_version_java, install_version_jar_and_json,
+    resolve_version_install_plan, transform_mirror_url,
+};
 use plugin::{read_plugin_file, run_plugin_wasm};
 
 #[cfg_attr(mobile, tauri::mobile_entry_point)]
@@ -76,7 +81,15 @@ pub fn run() {
             load_launcher_config,
             save_launcher_config,
             pick_folder,
-            pick_file
+            pick_file,
+            fetch_version_manifest,
+            fetch_version_detail,
+            resolve_version_install_plan,
+            install_version_jar_and_json,
+            download_missing_libraries,
+            download_asset_objects,
+            transform_mirror_url,
+            infer_version_java
         ])
         .run(tauri::generate_context!())
         .expect("error while running tauri application");

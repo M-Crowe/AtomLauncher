@@ -10,6 +10,7 @@ import { LogView } from "./components/LogView";
 import { AccountCard } from "./components/AccountCard";
 import { AccountModal } from "./components/AccountModal";
 import { InitWizard } from "./components/InitWizard";
+import { VersionDownloadModal } from "./components/VersionDownloadModal";
 import type { Account } from "./types/account";
 import { getActiveAccount, onAccountsChange } from "./utils/accountService";
 import type { LaunchState, LogEntry, MinecraftVersionInfo } from "./types/launcher";
@@ -43,6 +44,7 @@ function App() {
   const [javaRuntimes, setJavaRuntimes] = useState<JavaRuntime[]>([]);
   const [activeAccount, setActiveAccount] = useState<Account | null>(null);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
+  const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
   const [isInitialized, setIsInitialized] = useState<boolean | null>(null);
 
   // Check launcher initialization state and synchronize settings
@@ -373,7 +375,18 @@ function App() {
                   shrink-0
                   "
                 >
-                  <h2 className="text-[16px] font-fusion text-btn-primary-active">实例列表</h2>
+                  <div className="flex items-center gap-2">
+                    <h2 className="text-[16px] font-fusion text-btn-primary-active">实例列表</h2>
+                    <button
+                      type="button"
+                      data-testid="open-download-modal-button"
+                      onClick={() => setIsDownloadModalOpen(true)}
+                      className="px-1.5 py-0.5 text-[10px] font-fusion bg-grass-80 hover:bg-[#2E5E1C] text-white rounded cursor-pointer transition-colors"
+                      title="下载新版本"
+                    >
+                      下载
+                    </button>
+                  </div>
                   <span className="text-[10px] font-fusion text-stone-60">
                     {versions.length} 个可用
                   </span>
@@ -414,8 +427,16 @@ function App() {
                       );
                     })
                   ) : (
-                    <div className="flex items-center justify-center p-4 text-stone-60 font-fusion text-[11px] text-center">
-                      未扫描到本地游戏版本，请进入设置配置扫描目录
+                    <div className="flex flex-col items-center justify-center p-4 gap-2 text-stone-60 font-fusion text-[11px] text-center">
+                      <span>未扫描到本地游戏版本</span>
+                      <button
+                        type="button"
+                        data-testid="empty-download-button"
+                        onClick={() => setIsDownloadModalOpen(true)}
+                        className="px-3 py-1 font-fusion text-xs bg-grass-80 hover:bg-[#2E5E1C] text-white rounded cursor-pointer transition-colors shadow-[1px_1px_0_0_#1F1F1F]"
+                      >
+                        立即下载 Minecraft
+                      </button>
                     </div>
                   )}
                 </div>
@@ -518,6 +539,15 @@ function App() {
         isOpen={isAccountModalOpen}
         onClose={() => setIsAccountModalOpen(false)}
         onAccountSwitched={(acc) => setActiveAccount(acc)}
+      />
+
+      <VersionDownloadModal
+        isOpen={isDownloadModalOpen}
+        onClose={() => setIsDownloadModalOpen(false)}
+        onInstalled={(vId) => {
+          refreshVersions();
+          setSelectedVersionId(vId);
+        }}
       />
 
       <WindowControls />

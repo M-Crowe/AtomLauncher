@@ -64,3 +64,26 @@ export interface StartedEventPayload {
   pid: number;
   versionId: string;
 }
+
+export interface MissingLibraryInfo {
+  name: string;
+  path: string;
+  url?: string;
+  sha1?: string;
+  size?: number;
+}
+
+export interface MissingAssetInfo {
+  name: string;
+  path: string;
+  hash: string;
+  size: number;
+}
+
+export interface IntegrityReport {
+  isComplete: boolean;
+  missingLibraries: MissingLibraryInfo[];
+  missingAssets: MissingAssetInfo[];
+  missingVersionJar: boolean;
+  totalMissingCount: number;
+}
