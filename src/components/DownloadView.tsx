@@ -92,7 +92,7 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
       case 'old_beta':
       case 'old_alpha':
       default:
-        return <span className="px-1.5 py-0.5 text-[10px] font-fusion bg-stone-60 text-white rounded shrink-0">历史版</span>;
+        return <span className="px-1.5 py-0.5 text-[10px] font-fusion bg-dirt-60 text-white rounded shrink-0">历史版</span>;
     }
   };
 
@@ -108,15 +108,15 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
   return (
     <div
       data-testid="download-view"
-      className="flex flex-col h-full w-full bg-[#11161d] text-stone-200 select-none overflow-hidden"
+      className="flex flex-col h-full w-full bg-surface-card text-stone-100 font-fusion select-none overflow-hidden"
     >
       {/* 顶部搜索与分类过滤工具栏 */}
-      <div className="flex flex-col gap-2.5 p-4 bg-[#161b22] border-b border-stone-800 shrink-0">
+      <div className="flex flex-col gap-2.5 p-3.5 bg-dirt-10 border-b-2 border-surface-slot shrink-0">
         <div className="flex items-center justify-between gap-3">
           {/* 版本搜索框 */}
-          <div className="flex-1 flex items-center bg-[#0e141b] border border-stone-700 rounded px-3 py-1.5">
+          <div className="flex-1 flex items-center bg-white/90 ring-1 ring-surface-slot/40 rounded px-3 py-1.5 focus-within:ring-2 focus-within:ring-grass-80">
             <svg
-              className="w-4 h-4 fill-stone-500 mr-2 shrink-0"
+              className="w-4 h-4 fill-stone-60 mr-2 shrink-0"
               viewBox="0 0 24 24"
             >
               <path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z" />
@@ -127,13 +127,13 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
               value={searchQuery}
               onChange={(e) => setSearchQuery(e.target.value)}
               placeholder="搜索 Minecraft 版本号 (如 1.20.4, 1.21, 24w33a)..."
-              className="w-full bg-transparent font-fusion text-xs text-stone-200 placeholder-stone-600 focus:outline-none"
+              className="w-full bg-transparent font-fusion text-xs text-stone-100 placeholder-stone-60 focus:outline-none"
             />
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="text-stone-500 hover:text-stone-300 text-xs px-1 cursor-pointer"
+                className="text-stone-60 hover:text-stone-100 font-fusion text-xs px-1 cursor-pointer"
               >
                 清空
               </button>
@@ -141,8 +141,8 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
           </div>
 
           {/* 快速镜像源切换 */}
-          <div className="flex items-center gap-1.5 bg-[#0e141b] p-1 rounded border border-stone-800 shrink-0">
-            <span className="font-fusion text-[11px] text-stone-500 px-1.5">下载源:</span>
+          <div className="flex items-center gap-1 bg-white/90 p-1 rounded ring-1 ring-surface-slot/40 shrink-0">
+            <span className="font-fusion text-[11px] text-stone-60 px-1">下载源:</span>
             {(
               [
                 { id: 'bmclapi', label: 'BMCLAPI' },
@@ -159,8 +159,8 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
                   px-2 py-0.5 font-fusion text-[11px] rounded transition-colors cursor-pointer
                   ${
                     downloadSource === s.id
-                      ? 'bg-grass-80 text-white font-bold'
-                      : 'text-stone-400 hover:text-stone-200 hover:bg-stone-800'
+                      ? 'bg-grass-80 text-white font-bold shadow-[1px_1px_0_0_#1B3B11]'
+                      : 'text-stone-80 hover:text-stone-100 hover:bg-dirt-20/40'
                   }
                 `}
               >
@@ -190,8 +190,8 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
                   px-3 py-1 font-fusion text-xs rounded transition-colors cursor-pointer
                   ${
                     categoryFilter === tab.id
-                      ? 'bg-grass-80 text-white font-bold shadow-[inset_1px_1px_0_rgba(255,255,255,0.2)]'
-                      : 'bg-stone-800/80 text-stone-400 hover:text-stone-200'
+                      ? 'bg-grass-80 text-white font-bold ring-1 ring-grass-100 shadow-[1px_1px_0_0_#1B3B11]'
+                      : 'bg-white/85 text-stone-80 ring-1 ring-surface-slot/30 hover:bg-white hover:text-stone-100'
                   }
                 `}
               >
@@ -200,7 +200,7 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
             ))}
           </div>
 
-          <span className="font-fusion text-[11px] text-stone-500">
+          <span className="font-fusion text-[11px] text-stone-60">
             共找到 {filteredVersions.length} 个版本
           </span>
         </div>
@@ -209,15 +209,15 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
       {/* 版本列表展示区域 */}
       <div className="flex-1 overflow-y-auto p-4 no-scrollbar">
         {loading ? (
-          <div className="flex flex-col items-center justify-center h-48 gap-2 text-stone-400 font-fusion text-xs">
-            <svg className="animate-spin w-5 h-5 text-stone-400" viewBox="0 0 24 24" fill="none">
+          <div className="flex flex-col items-center justify-center h-48 gap-2 text-stone-60 font-fusion text-xs">
+            <svg className="animate-spin w-5 h-5 text-grass-80" viewBox="0 0 24 24" fill="none">
               <circle className="opacity-25" cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" />
               <path className="opacity-75" fill="currentColor" d="M4 12a8 8 0 018-8v4a4 4 0 00-4 4H4z" />
             </svg>
             <span>正在连接镜像源拉取版本清单...</span>
           </div>
         ) : error ? (
-          <div className="flex flex-col items-center justify-center h-48 gap-2 text-rose-400 font-fusion text-xs">
+          <div className="flex flex-col items-center justify-center h-48 gap-2 text-redstone-60 font-fusion text-xs">
             <span>拉取版本失败: {error}</span>
             <button
               type="button"
@@ -227,19 +227,19 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
                   .then((d) => setManifest(d))
                   .finally(() => setLoading(false));
               }}
-              className="px-3 py-1 bg-stone-800 text-stone-200 rounded border border-stone-700 cursor-pointer"
+              className="px-3 py-1 bg-grass-80 hover:bg-grass-60 text-white rounded font-fusion text-xs cursor-pointer shadow-[1px_1px_0_0_#1B3B11]"
             >
               重试
             </button>
           </div>
         ) : filteredVersions.length === 0 ? (
-          <div className="flex flex-col items-center justify-center h-48 gap-2 text-stone-500 font-fusion text-xs">
+          <div className="flex flex-col items-center justify-center h-48 gap-2 text-stone-60 font-fusion text-xs">
             <span>未找到匹配的 Minecraft 版本</span>
             {searchQuery && (
               <button
                 type="button"
                 onClick={() => setSearchQuery('')}
-                className="px-3 py-1 bg-stone-800 text-stone-300 rounded border border-stone-700 hover:bg-stone-700 cursor-pointer"
+                className="px-3 py-1 bg-white ring-1 ring-surface-slot/40 text-stone-80 hover:text-stone-100 rounded cursor-pointer"
               >
                 清空搜索条件
               </button>
@@ -266,11 +266,11 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
                   }}
                   className={`
                     flex items-center justify-between p-3 rounded
-                    border transition-all cursor-pointer
+                    ring-1 transition-all cursor-pointer
                     ${
                       isSelected
-                        ? 'bg-dirt-20/40 border-grass-80 ring-1 ring-grass-80 shadow-[0_2px_8px_rgba(46,94,28,0.3)]'
-                        : 'bg-[#161b22] border-stone-800 hover:border-stone-700 hover:bg-[#1a2029]'
+                        ? 'bg-stone-10 ring-2 ring-grass-80 shadow-[2px_2px_0_0_#2E5E1C]'
+                        : 'bg-white/85 ring-surface-slot/30 hover:bg-white hover:ring-surface-slot/60 shadow-[1px_1px_0_0_rgba(0,0,0,0.06)]'
                     }
                   `}
                 >
@@ -281,7 +281,7 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
                       </span>
                       {getCategoryBadge(v.type)}
                     </div>
-                    <span className="font-fusion text-[10px] text-stone-500 truncate">
+                    <span className="font-fusion text-[10px] text-stone-60 truncate">
                       发布日期: {formatDate(v.releaseTime || v.time)}
                     </span>
                   </div>
@@ -290,8 +290,8 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
                     <span
                       className={`font-fusion text-[10px] px-2 py-0.5 rounded ${
                         installed
-                          ? 'bg-emerald-950/90 text-emerald-300 border border-emerald-700/80 font-bold'
-                          : 'bg-stone-800 text-stone-400 border border-stone-700'
+                          ? 'bg-grass-80/15 text-grass-80 ring-1 ring-grass-80/50 font-bold'
+                          : 'bg-dirt-20/40 text-stone-80 ring-1 ring-surface-slot/30'
                       }`}
                     >
                       {installed ? '本地已安装' : '未安装'}

@@ -243,6 +243,14 @@ pub fn detect_java_environments() -> Result<Vec<JavaRuntimeInfo>, String> {
         scan_java_in_directory(Path::new("/opt/jdk"), &mut visited_paths, &mut results);
     }
 
+    // 彻底去重，确保每个运行时 path 和 id 唯一
+    let mut seen_ids = HashSet::new();
+    let mut seen_paths = HashSet::new();
+    results.retain(|info| {
+        let norm_path = info.path.to_lowercase().replace(['/', '\\'], "_");
+        seen_ids.insert(info.id.clone()) && seen_paths.insert(norm_path)
+    });
+
     // 优先按版本倒序排列（推荐 Java 21 / 17 在前）
     results.sort_by(|a, b| b.major_version.cmp(&a.major_version));
 

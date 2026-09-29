@@ -568,7 +568,7 @@ export const SettingsView: React.FC = () => {
                     })()}
 
                     {/* 具体 Java 运行时列表 */}
-                    {runtimes.map((r) => {
+                    {runtimes.map((r, idx) => {
                       const isSelected = !settings.useCustomJava && settings.selectedJavaId === r.id;
                       const selectJava = () => {
                         setSettings((s) => {
@@ -584,7 +584,7 @@ export const SettingsView: React.FC = () => {
                       };
                       return (
                         <div
-                          key={r.id}
+                          key={`${r.id || r.path}-${idx}`} /* key={r.id} */
                           onClick={selectJava}
                           className={`p-3 ring-2 cursor-pointer transition-all flex flex-col gap-1 ${
                             isSelected

@@ -267,7 +267,13 @@ export async function scanSystemJavaRuntimes(): Promise<JavaRuntime[]> {
       const { invoke } = await import('@tauri-apps/api/core');
       const detected = await invoke<JavaRuntime[]>('detect_java_environments');
       if (Array.isArray(detected)) {
-        return detected;
+        const seen = new Set<string>();
+        return detected.filter((item) => {
+          const key = (item.id || item.path || '').toLowerCase();
+          if (!key || seen.has(key)) return false;
+          seen.add(key);
+          return true;
+        });
       }
     }
   } catch (err) {

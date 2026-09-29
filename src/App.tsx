@@ -357,13 +357,14 @@ function App() {
       >
         {/* 滑动轨道：主界面与日志/下载管理器界面左右平滑拉伸滑动切换 */}
         <div
-          className={`w-full h-full flex transition-transform duration-300 ease-in-out ${
-            isLogViewOpen
-              ? "-translate-x-full"
+          className="w-full h-full flex transition-transform duration-300 ease-in-out"
+          style={{
+            transform: isLogViewOpen
+              ? 'translateX(-100%)'
               : isDownloadManagerOpen
-              ? "-translate-x-[200%]"
-              : "translate-x-0"
-          }`}
+              ? 'translateX(-200%)' /* -translate-x-[200%] */
+              : 'translateX(0%)',
+          }}
         >
           {/* 面板 1: 主启动器界面 */}
           <div
@@ -599,18 +600,18 @@ function App() {
             />
           </div>
         </div>
-      </div>
 
-      {/* 扁平化现代设计：Steam 风格底栏下载指示条 (位于窗口底部正中安全区) */}
-      {!isDownloadManagerOpen && (
-        <SteamDownloadBar
-          task={downloadTask}
-          onClick={() => {
-            setIsLogViewOpen(false);
-            setIsDownloadManagerOpen(true);
-          }}
-        />
-      )}
+        {/* 紧密嵌入在主卡片内部的最底端（在 bg-surface-card ring-4 ring-inset ring-border-hard 容器的底部边框处） */}
+        {!isDownloadManagerOpen && (
+          <SteamDownloadBar
+            task={downloadTask}
+            onClick={() => {
+              setIsLogViewOpen(false);
+              setIsDownloadManagerOpen(true);
+            }}
+          />
+        )}
+      </div>
 
       {/* 扁平化现代设计：实时日志悬浮胶囊按钮 (位于窗口左下方，视觉风格区别于启动器复古像素界面) */}
       {(runningPid || logs.length > 0 || launchState === "running" || launchState === "launching" || launchState === "crashed") && (

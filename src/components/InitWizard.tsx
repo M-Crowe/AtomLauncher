@@ -546,7 +546,7 @@ export const InitWizard: React.FC<InitWizardProps> = ({ onComplete }) => {
                       const isTopRecommended = idx === 0 || runtime.majorVersion === 25 || runtime.majorVersion === 21;
                       return (
                         <div
-                          key={runtime.id}
+                          key={`${runtime.id || runtime.path}-${idx}`}
                           onClick={() => {
                             setSelectedJavaId(runtime.id);
                             setUseCustomJava(false);
