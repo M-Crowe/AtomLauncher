@@ -11,9 +11,16 @@ import { AccountCard } from "./components/AccountCard";
 import { AccountModal } from "./components/AccountModal";
 import { InitWizard } from "./components/InitWizard";
 import { VersionDownloadModal } from "./components/VersionDownloadModal";
+import { DownloadView } from "./components/DownloadView";
+import { DownloadDetailSidebar } from "./components/DownloadDetailSidebar";
+import { SteamDownloadBar } from "./components/SteamDownloadBar";
+import { DownloadManagerWorkbench } from "./components/DownloadManagerWorkbench";
 import type { Account } from "./types/account";
 import { getActiveAccount, onAccountsChange } from "./utils/accountService";
 import type { LaunchState, LogEntry, MinecraftVersionInfo } from "./types/launcher";
+import type { DownloadSource, ManifestVersionEntry, DownloadTaskState } from "./types/downloader";
+import { downloadManager } from "./utils/downloadManager";
+import { transformDownloadUrl } from "./utils/downloadService";
 import {
   killMinecraftInstance,
   launchMinecraft,
@@ -39,8 +46,12 @@ function App() {
   const [runningPid, setRunningPid] = useState<number | null>(null);
   const [logs, setLogs] = useState<LogEntry[]>([]);
   const [isLogViewOpen, setIsLogViewOpen] = useState(false);
+  const [isDownloadManagerOpen, setIsDownloadManagerOpen] = useState(false);
   const [versions, setVersions] = useState<MinecraftVersionInfo[]>([]);
   const [selectedVersionId, setSelectedVersionId] = useState<string>("1.20.4");
+  const [selectedManifestVersion, setSelectedManifestVersion] = useState<ManifestVersionEntry | null>(null);
+  const [downloadSource, setDownloadSource] = useState<DownloadSource>(loadLauncherSettings().downloadSource || 'bmclapi');
+  const [downloadTask, setDownloadTask] = useState<DownloadTaskState>(downloadManager.getState());
   const [javaRuntimes, setJavaRuntimes] = useState<JavaRuntime[]>([]);
   const [activeAccount, setActiveAccount] = useState<Account | null>(null);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -194,6 +205,48 @@ function App() {
     };
   }, []);
 
+  useEffect(() => {
+    const unsub = downloadManager.subscribe((st) => {
+      setDownloadTask(st);
+    });
+    return unsub;
+  }, []);
+
+  const handleStartDownload = () => {
+    const s = loadLauncherSettings();
+    const effectiveSource = downloadSource || s.downloadSource || 'bmclapi';
+    const effectiveId =
+      currentTab === "download" && selectedManifestVersion
+        ? selectedManifestVersion.id
+        : selectedVersionId;
+    const effectiveUrl =
+      currentTab === "download" && selectedManifestVersion
+        ? selectedManifestVersion.url
+        : transformDownloadUrl(
+            `https://piston-meta.mojang.com/v1/packages/${effectiveId}/${effectiveId}.json`,
+            effectiveSource
+          );
+
+    downloadManager.startDownload(
+      effectiveId,
+      effectiveUrl,
+      s.gameDir,
+      (success) => {
+        if (success) {
+          refreshVersions();
+          setSelectedVersionId(effectiveId);
+        }
+      }
+    );
+  };
+
+  const activeTargetVersionId =
+    currentTab === "download"
+      ? (selectedManifestVersion?.id || selectedVersionId)
+      : selectedVersionId;
+  const isTargetInstalled = versions.some((v) => v.id === activeTargetVersionId);
+  const isDownloadMode = currentTab === "download" || !isTargetInstalled;
+
   const handleLaunch = async () => {
     setLaunchState("checking");
     const s = loadLauncherSettings();
@@ -302,10 +355,14 @@ function App() {
         overflow-hidden
         "
       >
-        {/* 滑动轨道：主界面与日志界面左右平滑拉伸滑动切换 */}
+        {/* 滑动轨道：主界面与日志/下载管理器界面左右平滑拉伸滑动切换 */}
         <div
           className={`w-full h-full flex transition-transform duration-300 ease-in-out ${
-            isLogViewOpen ? "-translate-x-full" : "translate-x-0"
+            isLogViewOpen
+              ? "-translate-x-full"
+              : isDownloadManagerOpen
+              ? "-translate-x-[200%]"
+              : "translate-x-0"
           }`}
         >
           {/* 面板 1: 主启动器界面 */}
@@ -337,6 +394,19 @@ function App() {
             {/* 主内容视图区域 (三页面受控视图) */}
             <div className="h-full w-full border-10 border-grass-80 rounded overflow-hidden relative">
               {currentTab === "home" && <CreeperCanvas />}
+              {currentTab === "download" && (
+                <DownloadView
+                  selectedVersion={selectedManifestVersion}
+                  onSelectVersion={(v) => setSelectedManifestVersion(v)}
+                  installedVersions={versions}
+                  downloadSource={downloadSource}
+                  onChangeDownloadSource={(src) => {
+                    setDownloadSource(src);
+                    const current = loadLauncherSettings();
+                    saveLauncherSettings({ ...current, downloadSource: src });
+                  }}
+                />
+              )}
               {currentTab === "settings" && <SettingsView />}
               {currentTab === "tools" && (
                 <ToolsView
@@ -346,7 +416,7 @@ function App() {
               )}
             </div>
 
-            {/* 右侧栏 (277px)：联动切换 (实例列表 <-> 设置分类选项) */}
+            {/* 右侧栏 (277px)：联动切换 (实例列表 <-> 设置分类选项 <-> 下载详情选项) */}
             <div
               className="
               relative h-full w-full
@@ -362,7 +432,7 @@ function App() {
                 className={`
                   absolute inset-0 h-full w-full flex flex-col justify-between
                   transition-all duration-300 ease-out
-                  ${currentTab === "settings"
+                  ${currentTab === "settings" || currentTab === "download"
                     ? "opacity-0 pointer-events-none translate-x-4"
                     : "opacity-100 translate-x-0"
                   }
@@ -457,6 +527,26 @@ function App() {
               >
                 <SettingsSidebar />
               </div>
+
+              {/* 下载详情侧边栏 */}
+              <div
+                aria-hidden={currentTab !== "download"}
+                inert={currentTab !== "download" ? true : undefined}
+                className={`
+                  absolute inset-0 h-full w-full
+                  transition-all duration-300 ease-out
+                  ${currentTab === "download"
+                    ? "opacity-100 translate-x-0"
+                    : "opacity-0 pointer-events-none translate-x-4"
+                  }
+                `}
+              >
+                <DownloadDetailSidebar
+                  version={selectedManifestVersion}
+                  installedVersions={versions}
+                  onTriggerDownload={handleStartDownload}
+                />
+              </div>
             </div>
 
             {/* 底部受控导航栏 */}
@@ -470,10 +560,17 @@ function App() {
             <div className="h-full w-full">
               <LaunchButtonGroup
                 state={launchState}
-                selectedVersion={selectedVersionId}
+                selectedVersion={activeTargetVersionId}
                 onLaunch={handleLaunch}
                 onKill={handleKill}
                 onOpenSettings={() => setCurrentTab("settings")}
+                isDownloadMode={isDownloadMode}
+                isDownloading={downloadTask.status === "downloading"}
+                downloadProgress={downloadTask.progressPercent}
+                isDownloadPaused={downloadTask.status === "paused"}
+                activeDownloadingVersion={downloadTask.versionId}
+                onResumeDownload={() => downloadManager.resumeDownload()}
+                onDownload={handleStartDownload}
               />
             </div>
           </div>
@@ -490,15 +587,40 @@ function App() {
               onClear={handleClearLogs}
             />
           </div>
+
+          {/* 面板 3: 独立现代全屏下载管理器工作台 (Steam 风格底栏点击展开) */}
+          <div className="min-w-full w-full h-full bg-[#0d1117] flex flex-col">
+            <DownloadManagerWorkbench
+              task={downloadTask}
+              onBack={() => setIsDownloadManagerOpen(false)}
+              onPause={() => downloadManager.pauseDownload()}
+              onResume={() => downloadManager.resumeDownload()}
+              onCancel={() => downloadManager.cancelDownload()}
+            />
+          </div>
         </div>
       </div>
+
+      {/* 扁平化现代设计：Steam 风格底栏下载指示条 (位于窗口底部正中安全区) */}
+      {!isDownloadManagerOpen && (
+        <SteamDownloadBar
+          task={downloadTask}
+          onClick={() => {
+            setIsLogViewOpen(false);
+            setIsDownloadManagerOpen(true);
+          }}
+        />
+      )}
 
       {/* 扁平化现代设计：实时日志悬浮胶囊按钮 (位于窗口左下方，视觉风格区别于启动器复古像素界面) */}
       {(runningPid || logs.length > 0 || launchState === "running" || launchState === "launching" || launchState === "crashed") && (
         <button
           type="button"
           data-testid="bottom-log-status-button"
-          onClick={() => setIsLogViewOpen(!isLogViewOpen)}
+          onClick={() => {
+            setIsDownloadManagerOpen(false);
+            setIsLogViewOpen(!isLogViewOpen);
+          }}
           className="
             fixed left-12 bottom-3 z-50
             flex items-center gap-2 px-3.5 py-1.5

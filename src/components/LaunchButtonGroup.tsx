@@ -1,5 +1,6 @@
 import React from 'react';
 import type { LaunchState } from '../types/launcher';
+import DownloadIcon from '../assets/download.svg?react';
 
 interface LaunchButtonGroupProps {
   state: LaunchState;
@@ -7,6 +8,13 @@ interface LaunchButtonGroupProps {
   onLaunch: () => void;
   onKill: () => void;
   onOpenSettings: () => void;
+  isDownloadMode?: boolean;
+  isDownloading?: boolean;
+  downloadProgress?: number;
+  onDownload?: () => void;
+  isDownloadPaused?: boolean;
+  activeDownloadingVersion?: string;
+  onResumeDownload?: () => void;
 }
 
 export const LaunchButtonGroup: React.FC<LaunchButtonGroupProps> = ({
@@ -15,11 +23,28 @@ export const LaunchButtonGroup: React.FC<LaunchButtonGroupProps> = ({
   onLaunch,
   onKill,
   onOpenSettings,
+  isDownloadMode = false,
+  isDownloading = false,
+  downloadProgress = 0,
+  onDownload,
+  isDownloadPaused = false,
+  activeDownloadingVersion,
+  onResumeDownload,
 }) => {
   const isRunning = state === 'running';
   const isBusy = state === 'checking' || state === 'launching';
 
   const handleClickMain = () => {
+    if (isDownloadMode) {
+      if (isDownloadPaused) {
+        onResumeDownload?.();
+        return;
+      }
+      if (!isDownloading) {
+        onDownload?.();
+      }
+      return;
+    }
     if (isRunning) {
       onKill();
     } else if (!isBusy) {
@@ -31,21 +56,38 @@ export const LaunchButtonGroup: React.FC<LaunchButtonGroupProps> = ({
   let buttonText = `启动 ${selectedVersion || '1.20.4'}`;
   let btnBgClass = 'bg-btn-primary-bg hover:bg-btn-primary-hover active:bg-btn-primary-active text-btn-primary-text border-grass-80 shadow-[inset_2px_2px_0_rgba(255,255,255,0.25),inset_-2px_-2px_0_rgba(0,0,0,0.35)]';
 
-  if (state === 'checking') {
-    buttonText = '检查环境中...';
-    btnBgClass = 'bg-amber-600/90 text-white border-amber-800 animate-pulse';
-  } else if (state === 'launching') {
-    buttonText = '正在拉起...';
-    btnBgClass = 'bg-amber-500/90 text-white border-amber-700 animate-pulse';
-  } else if (state === 'running') {
-    buttonText = '运行中 · 强制结束';
-    btnBgClass = 'bg-redstone-100 hover:bg-red-700 active:bg-red-800 text-white border-red-900 shadow-[inset_2px_2px_0_rgba(255,255,255,0.25),inset_-2px_-2px_0_rgba(0,0,0,0.35)]';
-  } else if (state === 'crashed') {
-    buttonText = '游戏崩溃 · 点击重试';
-    btnBgClass = 'bg-red-800 hover:bg-red-700 active:bg-red-900 text-white border-red-950';
-  } else if (state === 'exited') {
-    buttonText = '已退出 · 重新启动';
-    btnBgClass = 'bg-btn-primary-bg hover:bg-btn-primary-hover active:bg-btn-primary-active text-btn-primary-text border-grass-80';
+  if (isDownloadMode) {
+    if (isDownloading) {
+      if (activeDownloadingVersion && activeDownloadingVersion !== selectedVersion) {
+        buttonText = `正在下载 ${activeDownloadingVersion} (${downloadProgress}%)`;
+      } else {
+        buttonText = `下载中 ${downloadProgress}%`;
+      }
+      btnBgClass = 'bg-amber-600/90 text-white border-amber-800 animate-pulse';
+    } else if (isDownloadPaused) {
+      buttonText = '下载已暂停 · 点击继续';
+      btnBgClass = 'bg-stone-700 hover:bg-stone-600 active:bg-stone-800 text-stone-200 border-stone-600 shadow-[inset_2px_2px_0_rgba(255,255,255,0.15)]';
+    } else {
+      buttonText = '一键下载安装';
+      btnBgClass = 'bg-btn-primary-bg hover:bg-btn-primary-hover active:bg-btn-primary-active text-btn-primary-text border-grass-80 shadow-[inset_2px_2px_0_rgba(255,255,255,0.25),inset_-2px_-2px_0_rgba(0,0,0,0.35)]';
+    }
+  } else {
+    if (state === 'checking') {
+      buttonText = '检查环境中...';
+      btnBgClass = 'bg-amber-600/90 text-white border-amber-800 animate-pulse';
+    } else if (state === 'launching') {
+      buttonText = '正在拉起...';
+      btnBgClass = 'bg-amber-500/90 text-white border-amber-700 animate-pulse';
+    } else if (state === 'running') {
+      buttonText = '运行中 · 强制结束';
+      btnBgClass = 'bg-redstone-100 hover:bg-red-700 active:bg-red-800 text-white border-red-900 shadow-[inset_2px_2px_0_rgba(255,255,255,0.25),inset_-2px_-2px_0_rgba(0,0,0,0.35)]';
+    } else if (state === 'crashed') {
+      buttonText = '游戏崩溃 · 点击重试';
+      btnBgClass = 'bg-red-800 hover:bg-red-700 active:bg-red-900 text-white border-red-950';
+    } else if (state === 'exited') {
+      buttonText = '已退出 · 重新启动';
+      btnBgClass = 'bg-btn-primary-bg hover:bg-btn-primary-hover active:bg-btn-primary-active text-btn-primary-text border-grass-80';
+    }
   }
 
   return (
@@ -59,14 +101,14 @@ export const LaunchButtonGroup: React.FC<LaunchButtonGroupProps> = ({
         ring-2 ring-inset ring-surface-slot
       "
     >
-      {/* 大块主按钮 (启动游戏控制与状态指示) */}
+      {/* 大块主按钮 (启动游戏控制与下载状态自适应) */}
       <button
         type="button"
         data-testid="main-launch-button"
-        disabled={isBusy}
+        disabled={(!isDownloadMode && isBusy) || (isDownloadMode && isDownloading)}
         onClick={handleClickMain}
         className={`
-          flex items-center justify-center
+          flex items-center justify-center gap-1.5
           px-3 py-2
           font-fusion font-bold text-sm
           border-2 rounded
@@ -76,6 +118,9 @@ export const LaunchButtonGroup: React.FC<LaunchButtonGroupProps> = ({
           ${btnBgClass}
         `}
       >
+        {isDownloadMode && !isDownloading && (
+          <DownloadIcon className="w-4 h-4 fill-current shrink-0" />
+        )}
         <span className="truncate">{buttonText}</span>
       </button>
 

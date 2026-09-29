@@ -40,4 +40,34 @@ export interface VersionInstallStatus {
   error?: string;
 }
 
+export interface DownloadFileItem {
+  id: string;
+  name: string;
+  path: string;
+  type: 'jar' | 'json' | 'library' | 'asset';
+  size: number;
+  downloaded: number;
+  status: 'pending' | 'downloading' | 'completed' | 'error';
+  speed?: string;
+  error?: string;
+}
+
+export type DownloadCategoryFilter = 'all' | 'release' | 'snapshot' | 'historical';
+
+export interface DownloadTaskState {
+  versionId: string;
+  versionType?: string;
+  status: 'idle' | 'downloading' | 'paused' | 'completed' | 'error';
+  phase: InstallProgressPhase;
+  currentStepText: string;
+  progressPercent: number;
+  speedMBs: number;
+  downloadedBytes: number;
+  totalBytes: number;
+  completedFiles: number;
+  totalFiles: number;
+  error?: string;
+  files: DownloadFileItem[];
+}
+
 export type { IntegrityReport, MissingLibraryInfo, MissingAssetInfo, DownloadSource };
