@@ -50,10 +50,10 @@ test('Account R2. Microsoft Azure Client ID & OAuth2 chain constants in Rust bac
   ];
   const authRs = authFiles.map(f => readFileSync(f, 'utf-8')).join('\n');
 
-  // Prism Launcher Azure Client ID 验证
+  // 微软 Azure Client ID 验证
   assert.ok(
-    authRs.includes('c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb'),
-    'Matches Prism Launcher Azure Client ID: c36a9fb6-4f2a-41ff-90bd-ae7cc92031eb'
+    authRs.includes('37c03091-93d8-4297-a59c-f3792cc080e0'),
+    'Matches Azure Client ID: 37c03091-93d8-4297-a59c-f3792cc080e0'
   );
 
   // 微软认证链端点验证
