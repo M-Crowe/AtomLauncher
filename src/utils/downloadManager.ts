@@ -2,6 +2,7 @@ import type {
   DownloadFileItem,
   DownloadTaskState,
   InstallProgressPhase,
+  ModLoaderType,
 } from '../types/downloader';
 import { executeFullVersionInstall } from './downloadService.ts';
 import { loadLauncherSettings } from './settingsStorage.ts';
@@ -259,11 +260,15 @@ export class DownloadManager {
     versionId: string,
     versionUrl: string = '',
     customGameDir?: string,
-    onFinish?: (success: boolean) => void
+    onFinish?: (success: boolean) => void,
+    loader: ModLoaderType = 'vanilla',
+    loaderVersion: string = '',
+    baseMcVersion?: string
   ): Promise<boolean> {
     const settings = loadLauncherSettings();
     const gameDir = customGameDir || settings.gameDir;
     const source = settings.downloadSource || 'bmclapi';
+    const effectiveBaseMc = baseMcVersion || versionId.split('-')[0] || versionId;
 
     // If version is already downloading, switch active
     const existing = this.tasks.get(versionId);
@@ -306,6 +311,8 @@ export class DownloadManager {
     // Fast-stream download simulation through throttle pool
     let activeIndex = 0;
     let lastSampleTime = Date.now();
+    let isRealBackendDone = false;
+    let isRealBackendSuccess = false;
 
     const existingInterval = this.simulationIntervals.get(versionId);
     if (existingInterval) {
@@ -364,7 +371,7 @@ export class DownloadManager {
       currentTask.currentStepText = phaseText;
       currentTask.speedMBs = activeIndex >= files.length ? 0 : Number(actualSpeedMBs.toFixed(1));
 
-      if (activeIndex >= files.length) {
+      if (activeIndex >= files.length || (isRealBackendDone && isRealBackendSuccess)) {
         pool.flush();
         clearInterval(interval);
         this.simulationIntervals.delete(versionId);
@@ -379,15 +386,65 @@ export class DownloadManager {
 
     this.simulationIntervals.set(versionId, interval);
 
-    // Concurrently trigger real backend installation (runs asynchronously off main thread)
-    return executeFullVersionInstall(gameDir, versionId, versionUrl, (status) => {
-      if (status.phase === 'completed') {
-        // Complete
-      }
-    }, source).catch((err) => {
-      console.warn('后端版本安装执行提示/离线回退:', err);
-      return false;
-    });
+    // Concurrently trigger real backend installation
+    return executeFullVersionInstall({
+      gameDir,
+      versionId,
+      baseMcVersion: effectiveBaseMc,
+      versionUrl,
+      loader,
+      loaderVersion,
+      source,
+      onProgress: (status) => {
+        const task = this.tasks.get(versionId);
+        if (task && task.status !== 'paused') {
+          task.phase = status.phase;
+          task.currentStepText = status.currentStepText;
+          if (status.phase === 'error') {
+            task.status = 'error';
+            task.error = status.error;
+            clearInterval(interval);
+            this.simulationIntervals.delete(versionId);
+            this.isSimulatingMap.set(versionId, false);
+            this.notify();
+            onFinish?.(false);
+          }
+        }
+      },
+    })
+      .then((success) => {
+        isRealBackendDone = true;
+        isRealBackendSuccess = success;
+        if (!success) {
+          const task = this.tasks.get(versionId);
+          if (task) {
+            task.status = 'error';
+            task.currentStepText = '下载安装失败，请检查网络连接或切换镜像源';
+            this.notify();
+          }
+          clearInterval(interval);
+          this.simulationIntervals.delete(versionId);
+          this.isSimulatingMap.set(versionId, false);
+          onFinish?.(false);
+        }
+        return success;
+      })
+      .catch((err) => {
+        console.warn('后端版本安装执行异常:', err);
+        isRealBackendDone = true;
+        isRealBackendSuccess = false;
+        const task = this.tasks.get(versionId);
+        if (task) {
+          task.status = 'error';
+          task.currentStepText = `安装失败: ${err instanceof Error ? err.message : String(err)}`;
+          this.notify();
+        }
+        clearInterval(interval);
+        this.simulationIntervals.delete(versionId);
+        this.isSimulatingMap.set(versionId, false);
+        onFinish?.(false);
+        return false;
+      });
   }
 
   public pauseDownload(versionId?: string): void {

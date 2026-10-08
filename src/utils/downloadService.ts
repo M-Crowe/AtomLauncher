@@ -2,9 +2,11 @@ import type {
   DownloadSource,
   IntegrityReport,
   MissingLibraryInfo,
+  ModLoaderType,
   VersionInstallStatus,
   VersionManifest,
 } from '../types/downloader';
+import { fetchLoaderProfile } from './loaderService.ts';
 import { loadLauncherSettings } from './settingsStorage.ts';
 
 function isTauriEnvironment(): boolean {
@@ -296,63 +298,176 @@ export async function downloadAssetObjects(
   return 0;
 }
 
+export interface FullVersionInstallOptions {
+  gameDir: string;
+  versionId: string;
+  baseMcVersion?: string;
+  versionUrl?: string;
+  loader?: ModLoaderType;
+  loaderVersion?: string;
+  onProgress?: (status: VersionInstallStatus) => void;
+  source?: DownloadSource;
+}
+
+export async function resolveAccurateVersionUrl(
+  baseVersionId: string,
+  providedUrl: string = '',
+  source: DownloadSource = 'bmclapi'
+): Promise<string> {
+  const hasPackageHash = /\/packages\/[a-f0-9]{40}\//i.test(providedUrl);
+  if (hasPackageHash) {
+    return transformDownloadUrl(providedUrl, source);
+  }
+
+  try {
+    const manifest = await fetchVersionManifest(source);
+    const matched = manifest.versions.find((v) => v.id === baseVersionId);
+    if (matched && matched.url) {
+      return transformDownloadUrl(matched.url, source);
+    }
+  } catch (err) {
+    console.warn('[downloadService] resolveAccurateVersionUrl manifest lookup fallback:', err);
+  }
+
+  return (
+    providedUrl ||
+    transformDownloadUrl(
+      `https://piston-meta.mojang.com/v1/packages/${baseVersionId}/${baseVersionId}.json`,
+      source
+    )
+  );
+}
+
 /**
- * 完整的一键版本下载与安装引擎编排器
+ * 完整的一键版本下载与安装引擎编排器 (支持 Vanilla 与各类 ModLoader 完整闭环)
  */
 export async function executeFullVersionInstall(
-  gameDir: string,
-  versionId: string,
-  versionUrl: string,
-  onProgress?: (status: VersionInstallStatus) => void,
-  source?: DownloadSource
+  gameDirOrOptions: string | FullVersionInstallOptions,
+  versionIdParam?: string,
+  versionUrlParam?: string,
+  onProgressParam?: (status: VersionInstallStatus) => void,
+  sourceParam?: DownloadSource
 ): Promise<boolean> {
+  let gameDir: string;
+  let versionId: string;
+  let baseMcVersion: string;
+  let versionUrl: string;
+  let loader: ModLoaderType;
+  let loaderVersion: string;
+  let onProgress: ((status: VersionInstallStatus) => void) | undefined;
+  let source: DownloadSource | undefined;
+
+  if (typeof gameDirOrOptions === 'object') {
+    gameDir = gameDirOrOptions.gameDir;
+    versionId = gameDirOrOptions.versionId;
+    baseMcVersion = gameDirOrOptions.baseMcVersion || versionId.split('-')[0] || versionId;
+    versionUrl = gameDirOrOptions.versionUrl || '';
+    loader = gameDirOrOptions.loader || 'vanilla';
+    loaderVersion = gameDirOrOptions.loaderVersion || '';
+    onProgress = gameDirOrOptions.onProgress;
+    source = gameDirOrOptions.source;
+  } else {
+    gameDir = gameDirOrOptions;
+    versionId = versionIdParam || '1.21.1';
+    baseMcVersion = versionId.split('-')[0] || versionId;
+    versionUrl = versionUrlParam || '';
+    loader = 'vanilla';
+    loaderVersion = '';
+    onProgress = onProgressParam;
+    source = sourceParam;
+  }
+
   const currentSettings = loadLauncherSettings();
   const effectiveSource = source || currentSettings.downloadSource || 'bmclapi';
 
   try {
-    // 阶段 1: 拉取版本详情 JSON
+    // 阶段 1: 解析基础版本准确 URL 并拉取元数据
     onProgress?.({
       phase: 'details',
-      currentStepText: `正在拉取 ${versionId} 版本元数据...`,
+      currentStepText: `正在拉取 ${baseMcVersion} 基础版本元数据...`,
       progressPercent: 10,
       totalItems: 4,
       completedItems: 0,
     });
-    const versionDetail = await fetchVersionDetail(versionUrl, effectiveSource);
 
-    // 阶段 2: 写入版本配置并下载 Client JAR
+    const accurateUrl = await resolveAccurateVersionUrl(baseMcVersion, versionUrl, effectiveSource);
+    const baseVersionDetail = await fetchVersionDetail(accurateUrl, effectiveSource);
+
+    // 阶段 2: 写入基础客户端版本配置并下载 Client JAR
     onProgress?.({
       phase: 'client_jar',
-      currentStepText: `正在写入配置并下载 Client 核心 JAR...`,
+      currentStepText: `正在下载 ${baseMcVersion} Client 核心 JAR...`,
       progressPercent: 35,
       totalItems: 4,
       completedItems: 1,
     });
-    await installVersionJarAndJson(gameDir, versionId, versionDetail, effectiveSource);
+    await installVersionJarAndJson(gameDir, baseMcVersion, baseVersionDetail, effectiveSource);
 
-    // 阶段 3: 评估完整性并补充缺失依赖
+    // 阶段 3: 如果配置了 Mod 加载器 (Fabric / Quilt / NeoForge / Forge)
+    if (loader && loader !== 'vanilla') {
+      onProgress?.({
+        phase: 'details',
+        currentStepText: `正在拉取 ${loader} 加载器配置与依赖信息...`,
+        progressPercent: 45,
+        totalItems: 4,
+        completedItems: 1,
+      });
+
+      const loaderProfile = await fetchLoaderProfile(baseMcVersion, loader, loaderVersion, effectiveSource);
+      if (loaderProfile) {
+        loaderProfile.id = versionId;
+        loaderProfile.inheritsFrom = baseMcVersion;
+        await installVersionJarAndJson(gameDir, versionId, loaderProfile, effectiveSource);
+
+        // 分析并下载加载器专属依赖库
+        onProgress?.({
+          phase: 'libraries',
+          currentStepText: `正在下载 ${loader} 加载器核心依赖库...`,
+          progressPercent: 55,
+          totalItems: 4,
+          completedItems: 2,
+        });
+        const loaderPlan = await resolveVersionInstallPlan(gameDir, versionId, loaderProfile, effectiveSource);
+        if (loaderPlan.missingLibraries.length > 0) {
+          await downloadMissingLibraries(gameDir, loaderPlan.missingLibraries, effectiveSource);
+        }
+      }
+    } else if (versionId !== baseMcVersion) {
+      // 自定义命名的纯净原版副本，配置继承或复制
+      const customVanillaJson = {
+        ...baseVersionDetail,
+        id: versionId,
+        inheritsFrom: baseMcVersion,
+      };
+      await installVersionJarAndJson(gameDir, versionId, customVanillaJson, effectiveSource);
+    }
+
+    // 阶段 4: 评估基础依赖完整性并补充缺失依赖
     onProgress?.({
       phase: 'libraries',
       currentStepText: `正在分析跨平台依赖库 (Libraries)...`,
-      progressPercent: 60,
+      progressPercent: 70,
       totalItems: 4,
       completedItems: 2,
     });
-    const plan = await resolveVersionInstallPlan(gameDir, versionId, versionDetail, effectiveSource);
+    const basePlan = await resolveVersionInstallPlan(gameDir, baseMcVersion, baseVersionDetail, effectiveSource);
 
-    if (plan.missingLibraries.length > 0) {
+    if (basePlan.missingLibraries.length > 0) {
       onProgress?.({
         phase: 'libraries',
-        currentStepText: `正在下载缺失的依赖库 (${plan.missingLibraries.length} 项)...`,
-        progressPercent: 75,
+        currentStepText: `正在下载缺失的基础依赖库 (${basePlan.missingLibraries.length} 项)...`,
+        progressPercent: 80,
         totalItems: 4,
         completedItems: 2,
       });
-      await downloadMissingLibraries(gameDir, plan.missingLibraries, effectiveSource);
+      await downloadMissingLibraries(gameDir, basePlan.missingLibraries, effectiveSource);
     }
 
-    // 阶段 4: 下载缺失 Assets 资源索引
-    const assetId = (versionDetail.assets as string) || (versionDetail.assetIndex as { id?: string })?.id || 'legacy';
+    // 阶段 5: 下载缺失 Assets 资源索引
+    const assetId =
+      (baseVersionDetail.assets as string) ||
+      (baseVersionDetail.assetIndex as { id?: string })?.id ||
+      'legacy';
     onProgress?.({
       phase: 'assets',
       currentStepText: `正在校验静态资源索引 (${assetId})...`,
@@ -362,7 +477,7 @@ export async function executeFullVersionInstall(
     });
     await downloadAssetObjects(gameDir, assetId, effectiveSource, 50);
 
-    // 阶段 5: 完成安装
+    // 阶段 6: 完成安装
     onProgress?.({
       phase: 'completed',
       currentStepText: `${versionId} 版本安装完成！`,

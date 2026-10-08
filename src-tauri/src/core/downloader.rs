@@ -628,6 +628,17 @@ pub fn install_version_jar_and_json_sync(
         }
     }
 
+    // 2.b 如果当前版本尚未生成 Client JAR，但声明了继承版本 (如 Fabric/Quilt/Forge)，自动复用父版本 JAR
+    let current_jar = version_folder.join(format!("{version_id}.jar"));
+    if !current_jar.exists() {
+        if let Some(parent) = version_json.get("inheritsFrom").and_then(|p| p.as_str()) {
+            let parent_jar = gdir.join("versions").join(parent).join(format!("{parent}.jar"));
+            if parent_jar.exists() {
+                let _ = fs::copy(&parent_jar, &current_jar);
+            }
+        }
+    }
+
     // 3. 如果存在 assetIndex，下载 index 文件
     if let Some(asset_idx) = version_json.get("assetIndex") {
         if let Some(raw_url) = asset_idx.get("url").and_then(|u| u.as_str()) {

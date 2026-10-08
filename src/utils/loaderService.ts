@@ -1,4 +1,4 @@
-import type { ModLoaderType } from '../types/downloader';
+import type { DownloadSource, ModLoaderType } from '../types/downloader';
 
 export interface LoaderInfo {
   type: ModLoaderType;
@@ -116,4 +116,119 @@ export function validateInstanceName(
   }
 
   return { valid: true };
+}
+
+export async function fetchLoaderProfile(
+  baseMcVersion: string,
+  loader: ModLoaderType,
+  loaderVersion: string,
+  source: DownloadSource = 'bmclapi'
+): Promise<Record<string, unknown> | null> {
+  if (loader === 'vanilla') {
+    return null;
+  }
+
+  const cleanLoaderVer = loaderVersion.replace(/\s*\(.*?\)/, '').trim();
+  const lowerSource = (source || 'bmclapi').toLowerCase();
+
+  if (loader === 'fabric') {
+    const metaUrl =
+      lowerSource === 'mojang' || lowerSource === 'official'
+        ? `https://meta.fabricmc.net/v2/versions/loader/${baseMcVersion}/${cleanLoaderVer}/profile/json`
+        : `https://bmclapi2.bangbang93.com/fabric-meta/v2/versions/loader/${baseMcVersion}/${cleanLoaderVer}/profile/json`;
+
+    try {
+      const resp = await fetch(metaUrl);
+      if (resp.ok) {
+        const json = await resp.json();
+        return json;
+      }
+    } catch {
+      // offline fallback
+    }
+
+    return {
+      id: `fabric-loader-${cleanLoaderVer}-${baseMcVersion}`,
+      inheritsFrom: baseMcVersion,
+      releaseTime: new Date().toISOString(),
+      time: new Date().toISOString(),
+      type: 'release',
+      mainClass: 'net.fabricmc.loader.impl.launch.knot.KnotClient',
+      arguments: {
+        game: [],
+        jvm: ['-DFabricMcEmu= net.minecraft.client.main.Main '],
+      },
+      libraries: [
+        { name: `net.fabricmc:fabric-loader:${cleanLoaderVer}`, url: 'https://maven.fabricmc.net/' },
+        { name: `net.fabricmc:intermediary:${baseMcVersion}`, url: 'https://maven.fabricmc.net/' },
+        { name: 'net.fabricmc:sponge-mixin:0.15.4+mixin.0.8.7', url: 'https://maven.fabricmc.net/' },
+        { name: 'org.ow2.asm:asm:9.7.1', url: 'https://maven.fabricmc.net/' },
+        { name: 'org.ow2.asm:asm-analysis:9.7.1', url: 'https://maven.fabricmc.net/' },
+        { name: 'org.ow2.asm:asm-commons:9.7.1', url: 'https://maven.fabricmc.net/' },
+        { name: 'org.ow2.asm:asm-tree:9.7.1', url: 'https://maven.fabricmc.net/' },
+        { name: 'org.ow2.asm:asm-util:9.7.1', url: 'https://maven.fabricmc.net/' },
+      ],
+    };
+  }
+
+  if (loader === 'quilt') {
+    const metaUrl = `https://meta.quiltmc.org/v3/versions/loader/${baseMcVersion}/${cleanLoaderVer}/profile/json`;
+    try {
+      const resp = await fetch(metaUrl);
+      if (resp.ok) {
+        const json = await resp.json();
+        return json;
+      }
+    } catch {
+      // offline fallback
+    }
+
+    return {
+      id: `quilt-loader-${cleanLoaderVer}-${baseMcVersion}`,
+      inheritsFrom: baseMcVersion,
+      type: 'release',
+      mainClass: 'org.quiltmc.loader.impl.launch.knot.KnotClient',
+      arguments: {
+        game: [],
+      },
+      libraries: [
+        { name: `org.quiltmc:quilt-loader:${cleanLoaderVer}`, url: 'https://maven.quiltmc.org/repository/release/' },
+        { name: `net.fabricmc:intermediary:${baseMcVersion}`, url: 'https://maven.fabricmc.net/' },
+        { name: 'net.fabricmc:sponge-mixin:0.15.4+mixin.0.8.7', url: 'https://maven.fabricmc.net/' },
+        { name: 'org.ow2.asm:asm:9.7.1', url: 'https://maven.fabricmc.net/' },
+      ],
+    };
+  }
+
+  if (loader === 'neoforge') {
+    return {
+      id: `neoforge-${cleanLoaderVer}`,
+      inheritsFrom: baseMcVersion,
+      type: 'release',
+      mainClass: 'cpw.mods.bootstraplauncher.BootstrapLauncher',
+      arguments: {
+        game: ['--fml.neoForgeVersion', cleanLoaderVer, '--fml.mcVersion', baseMcVersion],
+      },
+      libraries: [
+        { name: `net.neoforged:neoforge:${cleanLoaderVer}`, url: 'https://maven.neoforged.net/releases/' },
+      ],
+    };
+  }
+
+  if (loader === 'forge') {
+    return {
+      id: `${baseMcVersion}-forge-${cleanLoaderVer}`,
+      inheritsFrom: baseMcVersion,
+      type: 'release',
+      mainClass: 'cpw.mods.bootstraplauncher.BootstrapLauncher',
+      arguments: {
+        game: ['--fml.forgeVersion', cleanLoaderVer, '--fml.mcVersion', baseMcVersion],
+      },
+      libraries: [
+        { name: `net.minecraftforge:forge:${baseMcVersion}-${cleanLoaderVer}`, url: 'https://maven.minecraftforge.net/' },
+      ],
+    };
+  }
+
+  return null;
 }

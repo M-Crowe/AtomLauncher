@@ -26,35 +26,22 @@ export const InstallConfirmModal: React.FC<InstallConfirmModalProps> = ({
   installedVersions,
   onConfirm,
 }) => {
-  const [selectedLoader, setSelectedLoader] = useState<ModLoaderType>(initialLoader);
-  const [selectedLoaderVersion, setSelectedLoaderVersion] = useState<string>(initialLoaderVersion || '');
   const [customName, setCustomName] = useState<string>('');
 
   const mcVersionId = version?.id || '1.21.1';
   const availableLoaders = useMemo(() => getAvailableLoaders(mcVersionId), [mcVersionId]);
+  const currentLoaderInfo = useMemo(
+    () => availableLoaders.find((l) => l.type === initialLoader) || availableLoaders[0],
+    [availableLoaders, initialLoader]
+  );
 
-  // 当弹窗打开或版本/加载器改变时，初始化名称
+  // 当弹窗打开时，根据外部已选的 loader 和版本初始化名称
   useEffect(() => {
     if (isOpen && version) {
-      const loader = initialLoader || 'vanilla';
-      setSelectedLoader(loader);
-      const defaultName = getDefaultInstanceName(version.id, loader);
+      const defaultName = getDefaultInstanceName(version.id, initialLoader);
       setCustomName(defaultName);
-
-      const loaderData = availableLoaders.find((l) => l.type === loader);
-      setSelectedLoaderVersion(initialLoaderVersion || loaderData?.recommendedVersion || '');
     }
-  }, [isOpen, version, initialLoader, initialLoaderVersion]);
-
-  // 当加载器切换时，如果用户没有手动重度改名，同步更新默认后缀
-  const handleSelectLoader = (loaderType: ModLoaderType) => {
-    setSelectedLoader(loaderType);
-    const loaderData = availableLoaders.find((l) => l.type === loaderType);
-    setSelectedLoaderVersion(loaderData?.recommendedVersion || '');
-    if (version) {
-      setCustomName(getDefaultInstanceName(version.id, loaderType));
-    }
-  };
+  }, [isOpen, version, initialLoader]);
 
   const validation = useMemo(() => {
     return validateInstanceName(customName, installedVersions);
@@ -65,7 +52,7 @@ export const InstallConfirmModal: React.FC<InstallConfirmModalProps> = ({
   const handleSubmit = (e?: React.FormEvent) => {
     e?.preventDefault();
     if (!validation.valid) return;
-    onConfirm(customName.trim(), selectedLoader, selectedLoaderVersion);
+    onConfirm(customName.trim(), initialLoader, initialLoaderVersion || currentLoaderInfo?.recommendedVersion);
     onClose();
   };
 
@@ -84,7 +71,7 @@ export const InstallConfirmModal: React.FC<InstallConfirmModalProps> = ({
         {/* 标题栏 */}
         <div className="flex items-center justify-between px-5 py-3.5 bg-dirt-10/70 border-b-2 border-surface-slot">
           <div className="flex items-center gap-2">
-            <span className="font-bold text-sm text-stone-90">安装 Minecraft 客户端</span>
+            <span className="font-bold text-sm text-stone-90">版本命名与安装确认</span>
             <span className="font-mono text-xs px-2 py-0.5 rounded bg-grass-80 text-white font-bold">
               {version.id}
             </span>
@@ -98,63 +85,35 @@ export const InstallConfirmModal: React.FC<InstallConfirmModalProps> = ({
           </button>
         </div>
 
-        {/* 弹窗内容表单 */}
+        {/* 弹窗内容表单：不重复展示加载器选择按钮，仅呈现已选摘要与命名输入 */}
         <form onSubmit={handleSubmit} className="p-5 flex flex-col gap-4">
-          {/* 加载器快捷确认 */}
-          <div className="flex flex-col gap-1.5">
-            <label className="text-xs font-bold text-stone-80">选择模组加载器</label>
-            <div className="grid grid-cols-3 gap-2">
-              {availableLoaders.map((l) => {
-                const isChosen = selectedLoader === l.type;
-                return (
-                  <button
-                    key={l.type}
-                    type="button"
-                    onClick={() => handleSelectLoader(l.type)}
-                    className={`
-                      flex flex-col items-center justify-center p-2 rounded text-xs transition-all cursor-pointer
-                      ${
-                        isChosen
-                          ? 'bg-grass-80 text-white font-bold ring-2 ring-grass-100 shadow-sm'
-                          : 'bg-white/80 hover:bg-stone-20 text-stone-80 border border-surface-slot'
-                      }
-                    `}
-                  >
-                    <span>{l.name}</span>
-                    <span className="text-[10px] opacity-80">{l.badge}</span>
-                  </button>
-                );
-              })}
+          {/* 版本与加载器摘要（只读展示，消除界面重复） */}
+          <div className="flex items-center justify-between p-3 rounded bg-white/80 border-2 border-surface-slot/40">
+            <div className="flex flex-col">
+              <span className="text-[10px] text-stone-60">基础游戏版本</span>
+              <span className="text-xs font-bold font-mono text-stone-90">
+                Minecraft {version.id}
+              </span>
+            </div>
+            <div className="flex flex-col items-end">
+              <span className="text-[10px] text-stone-60">已选模组加载器</span>
+              <div className="flex items-center gap-1.5 mt-0.5">
+                <span className={`text-[10px] px-1.5 py-0.2 rounded font-mono ${currentLoaderInfo.badgeColor}`}>
+                  {currentLoaderInfo.badge}
+                </span>
+                <span className="text-xs font-bold text-stone-90">
+                  {currentLoaderInfo.name}
+                  {initialLoader !== 'vanilla' && initialLoaderVersion ? ` (${initialLoaderVersion})` : ''}
+                </span>
+              </div>
             </div>
           </div>
-
-          {/* 若选择了非原版加载器，显示版本选择 */}
-          {selectedLoader !== 'vanilla' && (
-            <div className="flex flex-col gap-1.5">
-              <label className="text-xs font-bold text-stone-80">
-                {selectedLoader.toUpperCase()} 加载器版本
-              </label>
-              <select
-                value={selectedLoaderVersion}
-                onChange={(e) => setSelectedLoaderVersion(e.target.value)}
-                className="w-full px-3 py-1.5 bg-white border-2 border-surface-slot rounded text-xs font-fusion text-stone-90 focus:outline-none focus:border-grass-80"
-              >
-                {availableLoaders
-                  .find((l) => l.type === selectedLoader)
-                  ?.versions.map((ver) => (
-                    <option key={ver} value={ver}>
-                      {ver}
-                    </option>
-                  ))}
-              </select>
-            </div>
-          )}
 
           {/* 版本自定义命名与防冲突校验输入框 */}
           <div className="flex flex-col gap-1.5">
             <div className="flex items-center justify-between">
               <label htmlFor="install-instance-name" className="text-xs font-bold text-stone-80">
-                版本自定义名称 (存储于 versions 目录)
+                自定义版本名称 (存储于 versions 目录)
               </label>
               <span className="text-[10px] text-stone-60 font-mono">
                 {customName.length}/50

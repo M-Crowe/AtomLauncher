@@ -3,6 +3,7 @@ import assert from 'node:assert/strict';
 import { readFileSync } from 'node:fs';
 import { resolve } from 'node:path';
 import {
+  fetchLoaderProfile,
   getAvailableLoaders,
   getDefaultInstanceName,
   validateInstanceName,
@@ -101,4 +102,64 @@ test('Install & Loader R5. Zero Emoji Policy on newly added components', () => {
       `Strict Zero Emojis policy satisfied in ${f}`
     );
   }
+});
+
+test('Install & Loader R6. fetchLoaderProfile generates valid ModLoader configs for Fabric, Quilt, NeoForge, Forge', async () => {
+  const fabricProfile = await fetchLoaderProfile('1.21.1', 'fabric', '0.16.10');
+  assert.ok(fabricProfile);
+  assert.equal(fabricProfile.mainClass, 'net.fabricmc.loader.impl.launch.knot.KnotClient');
+  assert.equal(fabricProfile.inheritsFrom, '1.21.1');
+  assert.ok(Array.isArray(fabricProfile.libraries) && fabricProfile.libraries.length > 0);
+
+  const quiltProfile = await fetchLoaderProfile('1.21.1', 'quilt', '0.27.1');
+  assert.ok(quiltProfile);
+  assert.equal(quiltProfile.mainClass, 'org.quiltmc.loader.impl.launch.knot.KnotClient');
+  assert.equal(quiltProfile.inheritsFrom, '1.21.1');
+
+  const neoforgeProfile = await fetchLoaderProfile('1.21.1', 'neoforge', '21.1.65');
+  assert.ok(neoforgeProfile);
+  assert.equal(neoforgeProfile.inheritsFrom, '1.21.1');
+
+  const forgeProfile = await fetchLoaderProfile('1.20.1', 'forge', '47.4.4');
+  assert.ok(forgeProfile);
+  assert.equal(forgeProfile.inheritsFrom, '1.20.1');
+
+  const vanillaProfile = await fetchLoaderProfile('1.21.1', 'vanilla', '原生');
+  assert.equal(vanillaProfile, null);
+});
+
+test('Install & Loader R7. Non-duplication guarantee: InstallConfirmModal does NOT contain loader selector buttons', () => {
+  const modalContent = readFileSync(resolve('src/components/InstallConfirmModal.tsx'), 'utf-8');
+  assert.equal(
+    modalContent.includes('选择模组加载器'),
+    false,
+    'Modal strictly omits loader picker section to avoid duplication with sidebar'
+  );
+  assert.equal(
+    modalContent.includes('onSelectLoader'),
+    false,
+    'Modal does not contain loader select callbacks'
+  );
+  assert.equal(
+    modalContent.includes('setSelectedLoader'),
+    false,
+    'Modal does not maintain loader selection state'
+  );
+  assert.equal(
+    modalContent.includes('加载器版本'),
+    false,
+    'Modal does not duplicate loader version select dropdowns'
+  );
+});
+
+test('Install & Loader R8. Rust backend downloader synchronizes inherited parent jar for modded versions', () => {
+  const downloaderContent = readFileSync(resolve('src-tauri/src/core/downloader.rs'), 'utf-8');
+  assert.ok(
+    downloaderContent.includes('inheritsFrom'),
+    'Downloader handles inheritsFrom'
+  );
+  assert.ok(
+    downloaderContent.includes('fs::copy'),
+    'Downloader copies parent client jar if missing'
+  );
 });

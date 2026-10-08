@@ -223,7 +223,7 @@ function App() {
     setIsInstallModalOpen(true);
   };
 
-  const handleConfirmInstall = (customName: string, _loader: ModLoaderType, _loaderVer?: string) => {
+  const handleConfirmInstall = (customName: string, loader: ModLoaderType, loaderVer?: string) => {
     const s = loadLauncherSettings();
     const effectiveSource = downloadSource || s.downloadSource || 'bmclapi';
     const baseId = selectedManifestVersion?.id || activeTargetVersionId || '1.21.1';
@@ -243,7 +243,10 @@ function App() {
           refreshVersions();
           setSelectedVersionId(customName);
         }
-      }
+      },
+      loader,
+      loaderVer,
+      baseId
     );
   };
 
