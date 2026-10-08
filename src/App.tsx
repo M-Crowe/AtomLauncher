@@ -381,9 +381,7 @@ function App() {
           style={{
             transform: isLogViewOpen
               ? 'translateX(-100%)'
-              : isDownloadManagerOpen
-              ? 'translateX(-200%)' /* -translate-x-[200%] */
-              : 'translateX(0%)',
+              : 'translateX(0%)' /* translateX(-200%) -translate-x-[200%] */,
           }}
         >
           {/* 面板 1: 主启动器界面 */}
@@ -609,16 +607,23 @@ function App() {
             />
           </div>
 
-          {/* 面板 3: 独立现代全屏下载管理器工作台 (Steam 风格底栏点击展开) */}
-          <div className="min-w-full w-full h-full bg-[#0d1117] flex flex-col">
-            <DownloadManagerWorkbench
-              task={downloadTask}
-              onBack={() => setIsDownloadManagerOpen(false)}
-              onPause={() => downloadManager.pauseDownload()}
-              onResume={() => downloadManager.resumeDownload()}
-              onCancel={() => downloadManager.cancelDownload()}
-            />
-          </div>
+        </div>
+
+        {/* 面板 3: 独立下载管理器工作台 (从下往上滑出展开动画) */}
+        <div
+          className={`
+            absolute inset-0 z-30 w-full h-full bg-surface-card flex flex-col
+            transition-transform duration-300 ease-out
+            ${isDownloadManagerOpen ? "translate-y-0" : "translate-y-full pointer-events-none"}
+          `}
+        >
+          <DownloadManagerWorkbench
+            task={downloadTask}
+            onBack={() => setIsDownloadManagerOpen(false)}
+            onPause={() => downloadManager.pauseDownload()}
+            onResume={() => downloadManager.resumeDownload()}
+            onCancel={() => downloadManager.cancelDownload()}
+          />
         </div>
       </div>
 

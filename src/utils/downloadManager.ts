@@ -262,7 +262,7 @@ export class DownloadManager {
       phase: 'details',
       currentStepText: `正在拉取 ${versionId} 版本元数据...`,
       progressPercent: 0,
-      speedMBs: 18.5,
+      speedMBs: 0,
       downloadedBytes: 0,
       totalBytes,
       completedFiles: 0,
@@ -273,7 +273,8 @@ export class DownloadManager {
 
     // Fast-stream download simulation through throttle pool
     let activeIndex = 0;
-    const batchChunkSize = 100; // Efficient chunking preventing event loop saturation
+    let lastSampleTime = Date.now();
+    let lastSampleBytes = 0;
 
     if (this.simulationInterval) {
       clearInterval(this.simulationInterval);
@@ -284,18 +285,37 @@ export class DownloadManager {
       if (this.state.status === 'paused' || !this.isSimulating) return;
 
       const files = this.state.files;
-      const end = Math.min(files.length, activeIndex + batchChunkSize);
+      // Realistically meter throughput (~7.5-8.8 MB/s, strictly capped below 10MB/s max bandwidth)
+      const targetChunkBytes = 1100000 + Math.floor((Math.random() * 200000) - 100000);
+      let accumulatedBytes = 0;
+      let end = activeIndex;
+
+      while (end < files.length && (accumulatedBytes < targetChunkBytes || end - activeIndex < 10) && (end - activeIndex < 40)) {
+        accumulatedBytes += files[end].size;
+        end++;
+      }
+      if (end === activeIndex && activeIndex < files.length) {
+        end = activeIndex + 1;
+      }
+
+      // Calculate actual speed from transferred bytes and elapsed time
+      const now = Date.now();
+      const dt = lastSampleTime > 0 ? (now - lastSampleTime) / 1000 : 0.15;
+      const actualSpeedMBs = dt > 0 ? Math.min(9.6, Math.max(0.5, (accumulatedBytes / 1048576) / dt)) : 7.5;
+      const formattedSpeed = `${actualSpeedMBs.toFixed(1)} MB/s`;
 
       for (let i = activeIndex; i < end; i++) {
         const item = files[i];
         this.throttlePool.enqueue(item.id, {
           status: 'completed',
           downloaded: item.size,
-          speed: `${(15 + Math.random() * 18).toFixed(1)} MB/s`,
+          speed: formattedSpeed,
         });
       }
 
       activeIndex = end;
+      lastSampleTime = now;
+      lastSampleBytes = this.state.downloadedBytes;
 
       // Update phase text
       let phase: InstallProgressPhase = 'libraries';
@@ -310,7 +330,7 @@ export class DownloadManager {
 
       this.state.phase = phase;
       this.state.currentStepText = phaseText;
-      this.state.speedMBs = activeIndex >= files.length ? 0 : 22.4 + (Math.random() * 6 - 3);
+      this.state.speedMBs = activeIndex >= files.length ? 0 : Number(actualSpeedMBs.toFixed(1));
 
       if (activeIndex >= files.length) {
         this.throttlePool.flush();
@@ -346,7 +366,7 @@ export class DownloadManager {
   public resumeDownload(): void {
     if (this.state.status === 'paused') {
       this.state.status = 'downloading';
-      this.state.speedMBs = 19.8;
+      this.state.speedMBs = 0;
       this.notify();
     }
   }

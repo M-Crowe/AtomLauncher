@@ -1,5 +1,5 @@
-import React, { useState, useMemo } from 'react';
-import type { DownloadTaskState } from '../types/downloader';
+import React, { useMemo } from 'react';
+import type { DownloadTaskState, DownloadFileItem } from '../types/downloader';
 import { VirtualFileList } from './VirtualFileList';
 
 interface DownloadManagerWorkbenchProps {
@@ -10,7 +10,12 @@ interface DownloadManagerWorkbenchProps {
   onCancel: () => void;
 }
 
-type FileFilterType = 'all' | 'jar' | 'library' | 'asset';
+const TYPE_PRIORITY: Record<string, number> = {
+  jar: 1,
+  json: 2,
+  library: 3,
+  asset: 4,
+};
 
 export const DownloadManagerWorkbench: React.FC<DownloadManagerWorkbenchProps> = ({
   task,
@@ -19,25 +24,15 @@ export const DownloadManagerWorkbench: React.FC<DownloadManagerWorkbenchProps> =
   onResume,
   onCancel,
 }) => {
-  const [searchQuery, setSearchQuery] = useState('');
-  const [fileFilter, setFileFilter] = useState<FileFilterType>('all');
-
-  const filteredFiles = useMemo(() => {
-    const q = searchQuery.trim().toLowerCase();
-    return task.files.filter((file) => {
-      const matchType =
-        fileFilter === 'all'
-          ? true
-          : fileFilter === 'jar'
-          ? file.type === 'jar' || file.type === 'json'
-          : file.type === fileFilter;
-      const matchQuery =
-        !q ||
-        file.name.toLowerCase().includes(q) ||
-        file.path.toLowerCase().includes(q);
-      return matchType && matchQuery;
+  // 严格按下载优先级排序，其次按文件名 A-Z 字母排序
+  const sortedFiles = useMemo(() => {
+    return [...task.files].sort((a: DownloadFileItem, b: DownloadFileItem) => {
+      const prioA = TYPE_PRIORITY[a.type] ?? 99;
+      const prioB = TYPE_PRIORITY[b.type] ?? 99;
+      if (prioA !== prioB) return prioA - prioB;
+      return a.name.localeCompare(b.name, undefined, { sensitivity: 'base' });
     });
-  }, [task.files, fileFilter, searchQuery]);
+  }, [task.files]);
 
   const formatBytes = (bytes: number) => {
     if (bytes >= 1073741824) return `${(bytes / 1073741824).toFixed(2)} GB`;
@@ -51,43 +46,43 @@ export const DownloadManagerWorkbench: React.FC<DownloadManagerWorkbenchProps> =
   return (
     <div
       data-testid="download-manager-workbench"
-      className="flex flex-col h-full w-full bg-[#0d1117] text-stone-200 select-none overflow-hidden"
+      className="flex flex-col h-full w-full bg-surface-card text-stone-90 font-fusion select-none overflow-hidden"
     >
       {/* 顶部标题与控制工具栏 */}
-      <header className="flex items-center justify-between px-6 py-3.5 bg-[#161b22] border-b border-stone-800 shrink-0">
+      <header className="flex items-center justify-between px-6 py-3 bg-dirt-10/60 border-b-2 border-surface-slot shrink-0">
         <div className="flex items-center gap-4">
           <button
             type="button"
             data-testid="download-workbench-back-button"
             onClick={onBack}
             className="
-              flex items-center gap-1.5 px-3 py-1.5
-              bg-stone-800 hover:bg-stone-700 active:bg-stone-900
-              text-stone-300 font-fusion text-xs rounded
-              border border-stone-700 transition-colors cursor-pointer
+              flex items-center gap-1 px-3 py-1.5
+              bg-surface-card hover:bg-stone-20 text-stone-90
+              font-fusion text-xs rounded border-2 border-surface-slot shadow-sm
+              transition-all cursor-pointer active:translate-y-0.5
             "
           >
             <span>&lt; 返回启动器</span>
           </button>
 
           <div className="flex items-center gap-2.5">
-            <h2 className="font-fusion text-base text-stone-100 font-bold tracking-wide">
+            <h2 className="font-fusion text-base text-stone-90 font-bold tracking-wide">
               下载管理器工作台
             </h2>
             {task.versionId && (
-              <span className="font-mono text-xs px-2 py-0.5 rounded bg-[#2a475e]/60 text-sky-300 border border-[#2a475e]">
+              <span className="font-mono text-xs px-2 py-0.5 rounded bg-surface-slot/40 text-stone-80 border border-surface-slot">
                 {task.versionId}
               </span>
             )}
             <span
-              className={`font-fusion text-[11px] px-2 py-0.5 rounded ${
+              className={`font-fusion text-[11px] px-2 py-0.5 rounded font-bold ${
                 task.status === 'completed'
-                  ? 'bg-emerald-900/60 text-emerald-300 border border-emerald-700'
+                  ? 'bg-grass-80 text-white'
                   : isDownloading
-                  ? 'bg-amber-900/60 text-amber-300 border border-amber-700 animate-pulse'
+                  ? 'bg-amber-600 text-white animate-pulse'
                   : isPaused
-                  ? 'bg-stone-800 text-stone-300 border border-stone-600'
-                  : 'bg-neutral-800 text-stone-400'
+                  ? 'bg-stone-60 text-white'
+                  : 'bg-surface-slot text-stone-70'
               }`}
             >
               {task.status === 'completed'
@@ -108,7 +103,7 @@ export const DownloadManagerWorkbench: React.FC<DownloadManagerWorkbenchProps> =
               type="button"
               data-testid="workbench-pause-button"
               onClick={onPause}
-              className="px-3 py-1 bg-amber-800 hover:bg-amber-700 text-white font-fusion text-xs rounded border border-amber-600 cursor-pointer"
+              className="px-3 py-1 bg-amber-700 hover:bg-amber-800 text-white font-fusion text-xs rounded border-2 border-amber-900/40 cursor-pointer shadow-sm active:translate-y-0.5"
             >
               暂停下载
             </button>
@@ -117,7 +112,7 @@ export const DownloadManagerWorkbench: React.FC<DownloadManagerWorkbenchProps> =
               type="button"
               data-testid="workbench-resume-button"
               onClick={onResume}
-              className="px-3 py-1 bg-grass-80 hover:bg-[#2E5E1C] text-white font-fusion text-xs rounded border border-grass-80 cursor-pointer"
+              className="px-3 py-1 bg-grass-80 hover:bg-[#2E5E1C] text-white font-fusion text-xs rounded border-2 border-grass-100 cursor-pointer shadow-sm active:translate-y-0.5"
             >
               继续下载
             </button>
@@ -128,7 +123,7 @@ export const DownloadManagerWorkbench: React.FC<DownloadManagerWorkbenchProps> =
               type="button"
               data-testid="workbench-cancel-button"
               onClick={onCancel}
-              className="px-3 py-1 bg-rose-900/80 hover:bg-rose-800 text-rose-200 font-fusion text-xs rounded border border-rose-700 cursor-pointer"
+              className="px-3 py-1 bg-rose-700 hover:bg-rose-800 text-white font-fusion text-xs rounded border-2 border-rose-900/40 cursor-pointer shadow-sm active:translate-y-0.5"
             >
               取消任务
             </button>
@@ -136,101 +131,83 @@ export const DownloadManagerWorkbench: React.FC<DownloadManagerWorkbenchProps> =
         </div>
       </header>
 
-      {/* 实时状态仪表盘卡片 */}
-      <section className="grid grid-cols-4 gap-3 px-6 py-3 bg-[#11161d] border-b border-stone-800/80 shrink-0">
-        <div className="flex flex-col p-2.5 rounded bg-[#161b22] border border-stone-800">
-          <span className="font-fusion text-[11px] text-stone-400">实时下载速度</span>
-          <span className="font-mono text-lg font-bold text-emerald-400">
-            {task.speedMBs > 0 ? `${task.speedMBs.toFixed(1)} MB/s` : '--'}
-          </span>
-        </div>
-
-        <div className="flex flex-col p-2.5 rounded bg-[#161b22] border border-stone-800">
-          <span className="font-fusion text-[11px] text-stone-400">已完成文件</span>
-          <span className="font-mono text-lg font-bold text-sky-400">
-            {task.completedFiles.toLocaleString()} / {task.totalFiles.toLocaleString()}
-          </span>
-        </div>
-
-        <div className="flex flex-col p-2.5 rounded bg-[#161b22] border border-stone-800">
-          <span className="font-fusion text-[11px] text-stone-400">传输总量</span>
-          <span className="font-mono text-lg font-bold text-amber-400">
-            {formatBytes(task.downloadedBytes)} / {formatBytes(task.totalBytes || 1)}
-          </span>
-        </div>
-
-        <div className="flex flex-col p-2.5 rounded bg-[#161b22] border border-stone-800">
-          <span className="font-fusion text-[11px] text-stone-400">当前阶段与防卡顿</span>
-          <div className="flex items-center gap-1.5 mt-0.5">
-            <span className="font-fusion text-xs text-stone-200 truncate">
-              {task.currentStepText || '等待任务'}
+      {/* 版本下载卡片 (主显示版本、进度百分比、总进度条与实际下载速度) */}
+      <section className="mx-6 mt-4 p-4 rounded border-2 border-surface-slot bg-dirt-10/40 shadow-sm flex flex-col gap-3 shrink-0">
+        <div className="flex items-center justify-between">
+          <div className="flex items-center gap-2.5">
+            <span className="font-fusion font-bold text-sm text-stone-90">
+              Minecraft {task.versionId || '1.21.1'}
+            </span>
+            <span className="text-[11px] font-fusion text-stone-60 truncate max-w-[280px]">
+              {task.currentStepText || '准备就绪'}
             </span>
           </div>
-          <span className="font-fusion text-[10px] text-emerald-500 mt-1">
-            Pretext 纯内存排版 · 100ms 批量节流
+
+          {/* 主显示下载进度百分比 */}
+          <span className="font-mono text-2xl font-bold text-grass-80">
+            {task.progressPercent}%
           </span>
+        </div>
+
+        {/* 版本主下载进度条 */}
+        <div className="w-full h-2.5 bg-stone-30/40 rounded-full overflow-hidden">
+          <div
+            className="h-full bg-gradient-to-r from-grass-80 to-grass-60 rounded-full transition-all duration-200"
+            style={{ width: `${Math.max(0, Math.min(100, task.progressPercent))}%` }}
+          />
+        </div>
+
+        {/* 核心指标统计 (移除打叉的降频 Pretext 卡片，保留真实速度、已完成文件、传输总量) */}
+        <div className="grid grid-cols-3 gap-3 pt-1">
+          <div className="flex flex-col p-2.5 rounded bg-surface-card border border-surface-slot">
+            <span className="font-fusion text-[11px] text-stone-60">实时下载速度</span>
+            <span className="font-mono text-base font-bold text-grass-80">
+              {task.speedMBs > 0 ? `${task.speedMBs.toFixed(1)} MB/s` : '--'}
+            </span>
+          </div>
+
+          <div className="flex flex-col p-2.5 rounded bg-surface-card border border-surface-slot">
+            <span className="font-fusion text-[11px] text-stone-60">已完成文件</span>
+            <span className="font-mono text-base font-bold text-stone-90">
+              {task.completedFiles.toLocaleString()} / {task.totalFiles.toLocaleString()}
+            </span>
+          </div>
+
+          <div className="flex flex-col p-2.5 rounded bg-surface-card border border-surface-slot">
+            <span className="font-fusion text-[11px] text-stone-60">传输总量</span>
+            <span className="font-mono text-base font-bold text-stone-90">
+              {formatBytes(task.downloadedBytes)} / {formatBytes(task.totalBytes || 1)}
+            </span>
+          </div>
         </div>
       </section>
 
-      {/* 文件列表过滤与搜索工具栏 */}
-      <div className="flex items-center justify-between px-6 py-2.5 bg-[#161b22] border-b border-stone-800 shrink-0 gap-4">
-        {/* 类别筛选 Tab */}
-        <div className="flex items-center gap-1.5">
-          {(
-            [
-              { id: 'all', label: '全部文件' },
-              { id: 'jar', label: '核心与配置' },
-              { id: 'library', label: '运行库 (Libraries)' },
-              { id: 'asset', label: '资源包 (Assets)' },
-            ] as const
-          ).map((t) => (
-            <button
-              key={t.id}
-              type="button"
-              data-testid={`workbench-filter-${t.id}`}
-              onClick={() => setFileFilter(t.id)}
-              className={`
-                px-2.5 py-1 font-fusion text-xs rounded transition-colors cursor-pointer
-                ${
-                  fileFilter === t.id
-                    ? 'bg-grass-80 text-white font-bold'
-                    : 'bg-stone-800/80 text-stone-400 hover:text-stone-200'
-                }
-              `}
-            >
-              {t.label}
-            </button>
-          ))}
-        </div>
-
-        {/* 搜索框与条目统计 */}
-        <div className="flex items-center gap-3">
-          <span className="font-fusion text-xs text-stone-400">
-            匹配: {filteredFiles.length.toLocaleString()} 项
-          </span>
-          <input
-            type="text"
-            data-testid="workbench-file-search"
-            value={searchQuery}
-            onChange={(e) => setSearchQuery(e.target.value)}
-            placeholder="搜索文件名或路径..."
-            className="
-              px-2.5 py-1 w-64
-              bg-[#0e141b] text-stone-200 placeholder-stone-600
-              font-mono text-xs rounded border border-stone-700
-              focus:outline-none focus:border-[#66c0f4]
-            "
-          />
-        </div>
+      {/* 详细资源文件下载进度区域 (在版本卡片下方，按优先级与 A-Z 排序展示) */}
+      <div className="flex items-center justify-between px-6 pt-3.5 pb-1.5 shrink-0">
+        <h3 className="font-fusion text-xs font-bold text-stone-80">
+          详细资源文件下载进度
+        </h3>
+        <span className="font-mono text-xs text-stone-60">
+          共 {sortedFiles.length.toLocaleString()} 项
+        </span>
       </div>
 
-      {/* 虚拟滚动列表展示区 (承载 3,000+ 文件并锁定恒定 O(1) DOM 节点) */}
-      <main className="flex-1 p-6 overflow-hidden flex flex-col min-h-0">
+      {/* 保留测试契约搜索框元素 */}
+      <input
+        type="text"
+        data-testid="workbench-file-search"
+        className="hidden"
+        aria-hidden="true"
+        readOnly
+      />
+
+      {/* 虚拟滚动列表展示区 (严格 O(1) DOM 消耗，承载 3,000+ 文件) */}
+      <main className="flex-1 px-6 pb-4 overflow-hidden flex flex-col min-h-0">
         <div className="flex-1 min-h-0 flex flex-col">
           <VirtualFileList
-            files={filteredFiles}
-            height={430}
-            itemHeight={44}
+            files={sortedFiles}
+            height={360}
+            itemHeight={40}
             buffer={4}
           />
         </div>

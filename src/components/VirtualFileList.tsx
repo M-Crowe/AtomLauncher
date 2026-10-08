@@ -66,36 +66,12 @@ export const VirtualFileList: React.FC<VirtualFileListProps> = ({
     return `${Math.max(1, Math.round(bytes / 1024))} KB`;
   };
 
-  const getTypeBadge = (type: DownloadFileItem['type']) => {
-    switch (type) {
-      case 'jar':
-        return <span className="px-1.5 py-0.5 text-[10px] font-fusion bg-grass-80 text-white rounded shrink-0">核心</span>;
-      case 'json':
-        return <span className="px-1.5 py-0.5 text-[10px] font-fusion bg-dirt-80 text-white rounded shrink-0">配置</span>;
-      case 'library':
-        return <span className="px-1.5 py-0.5 text-[10px] font-fusion bg-[#2a475e] text-sky-200 rounded shrink-0">运行库</span>;
-      case 'asset':
-      default:
-        return <span className="px-1.5 py-0.5 text-[10px] font-fusion bg-stone-70 text-stone-200 rounded shrink-0">资源</span>;
+  const getFilePercent = (file: DownloadFileItem) => {
+    if (file.status === 'completed') return 100;
+    if (file.size > 0 && file.downloaded > 0) {
+      return Math.min(100, Math.floor((file.downloaded / file.size) * 100));
     }
-  };
-
-  const getStatusBadge = (status: DownloadFileItem['status'], speed?: string) => {
-    switch (status) {
-      case 'completed':
-        return <span className="text-[10px] font-fusion text-emerald-400">已就绪</span>;
-      case 'downloading':
-        return (
-          <span className="text-[10px] font-fusion text-amber-400 animate-pulse">
-            下载中 {speed ? `· ${speed}` : ''}
-          </span>
-        );
-      case 'error':
-        return <span className="text-[10px] font-fusion text-rose-400">失败</span>;
-      case 'pending':
-      default:
-        return <span className="text-[10px] font-fusion text-stone-500">队列中</span>;
-    }
+    return 0;
   };
 
   return (
@@ -104,10 +80,10 @@ export const VirtualFileList: React.FC<VirtualFileListProps> = ({
       data-testid="virtual-file-list"
       onScroll={handleScroll}
       style={{ height: `${height}px` }}
-      className="w-full overflow-y-auto relative bg-[#0e141b]/90 border border-stone-800 rounded select-none no-scrollbar"
+      className="w-full overflow-y-auto relative bg-surface-card border-2 border-surface-slot rounded select-none no-scrollbar shadow-inner"
     >
       {totalCount === 0 ? (
-        <div className="flex items-center justify-center h-full text-stone-500 font-fusion text-xs">
+        <div className="flex items-center justify-center h-full text-stone-50 font-fusion text-xs">
           <span>暂无匹配的文件条目</span>
         </div>
       ) : (
@@ -125,9 +101,8 @@ export const VirtualFileList: React.FC<VirtualFileListProps> = ({
           >
             {visibleFiles.map((file, idx) => {
               const absoluteIndex = startIndex + idx;
-
-              // Zero-DOM measurement for long path:
               const pathLayout = estimatePathLayout(file.path, 420, 16);
+              const filePercent = getFilePercent(file);
 
               return (
                 <div
@@ -137,33 +112,60 @@ export const VirtualFileList: React.FC<VirtualFileListProps> = ({
                   onClick={() => onItemClick?.(file)}
                   style={{ height: `${itemHeight}px` }}
                   className={`
-                    flex items-center justify-between px-3
-                    border-b border-stone-800/80
-                    hover:bg-neutral-800/50 transition-colors
+                    flex items-center justify-between px-3.5
+                    border-b border-surface-slot/40
+                    hover:bg-dirt-10/50 transition-colors
                     cursor-pointer
-                    ${file.status === 'completed' ? 'opacity-90' : 'opacity-100'}
+                    ${file.status === 'completed' ? 'opacity-95' : 'opacity-100'}
                   `}
                 >
-                  <div className="flex items-center gap-2.5 truncate mr-3 min-w-0">
-                    {getTypeBadge(file.type)}
-                    <div className="flex flex-col truncate min-w-0">
-                      <span className="font-fusion text-xs text-stone-200 truncate">
-                        {file.name}
-                      </span>
-                      <span
-                        title={file.path}
-                        className="text-[10px] font-mono text-stone-400 truncate"
-                      >
-                        {file.path}
-                      </span>
-                    </div>
+                  {/* 左侧：仅显示下载的文件名称与路径提示，彻底移除“资源/核心”标签 */}
+                  <div className="flex items-center gap-2 truncate mr-3 min-w-0 flex-1">
+                    <span
+                      title={file.path}
+                      className="font-fusion text-xs font-medium text-stone-90 truncate"
+                    >
+                      {file.name}
+                    </span>
                   </div>
 
+                  {/* 右侧：单文件进度条、主进度百分比与状态 */}
                   <div className="flex items-center gap-3 shrink-0">
-                    <span className="text-[10px] font-mono text-stone-400">
-                      {formatSize(file.size)}
+                    {/* 单文件下载进度条 */}
+                    <div className="w-24 sm:w-36 h-1.5 bg-surface-slot/40 rounded-full overflow-hidden shrink-0">
+                      <div
+                        className={`h-full transition-all duration-150 rounded-full ${
+                          file.status === 'completed'
+                            ? 'bg-grass-80'
+                            : file.status === 'error'
+                            ? 'bg-rose-500'
+                            : 'bg-gradient-to-r from-grass-80 to-grass-60'
+                        }`}
+                        style={{ width: `${filePercent}%` }}
+                      />
+                    </div>
+
+                    {/* 主显示下载进度百分比 */}
+                    <span
+                      className={`font-mono text-xs font-bold w-12 text-right shrink-0 ${
+                        file.status === 'completed'
+                          ? 'text-grass-80'
+                          : file.status === 'downloading'
+                          ? 'text-amber-700'
+                          : 'text-stone-70'
+                      }`}
+                    >
+                      {filePercent}%
                     </span>
-                    {getStatusBadge(file.status, file.speed)}
+
+                    {/* 文件大小与实时状态 */}
+                    <span className="text-[10px] font-mono text-stone-60 shrink-0 w-16 text-right truncate">
+                      {file.status === 'completed'
+                        ? '已完成'
+                        : file.status === 'downloading'
+                        ? (file.speed || '下载中')
+                        : formatSize(file.size)}
+                    </span>
                   </div>
                 </div>
               );
