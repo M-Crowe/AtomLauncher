@@ -13,6 +13,7 @@
   --font-fusion: "FusionPixelFont", sans-serif;
 
   /* Color Palette */
+
   --color-diamond-40: rgba(74, 237, 217, 1);
 
   --color-dirt-10: rgba(245, 235, 225, 1);
@@ -62,3 +63,66 @@
   --color-text-muted: var(--color-stone-60);
   --color-text-primary: var(--color-stone-100);
 }
+
+@keyframes viewExpandIn {
+  from {
+    opacity: 0;
+    transform: scale(0.99) translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: scale(1) translateY(0);
+  }
+}
+
+.animate-view-expand {
+  animation: viewExpandIn 0.3s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@keyframes tabpanelSlideIn {
+  from {
+    opacity: 0;
+    transform: translateY(4px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+
+.animate-tabpanel-in {
+  animation: tabpanelSlideIn 0.25s cubic-bezier(0.16, 1, 0.3, 1) forwards;
+}
+
+@media (prefers-reduced-motion: reduce) {
+  .animate-view-expand,
+  .animate-tabpanel-in,
+  .animate-bounce {
+    animation-duration: 0.01ms !important;
+    animation-iteration-count: 1 !important;
+    transition-duration: 0.01ms !important;
+  }
+}
+
+/* 全局隐藏原生滚动条，保持鼠标滚轮与手势平滑滚动 */
+* {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+*::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
+
+.no-scrollbar {
+  scrollbar-width: none !important;
+  -ms-overflow-style: none !important;
+}
+
+.no-scrollbar::-webkit-scrollbar {
+  display: none !important;
+  width: 0 !important;
+  height: 0 !important;
+}
