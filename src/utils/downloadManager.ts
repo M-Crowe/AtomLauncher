@@ -250,6 +250,7 @@ export class DownloadManager {
     task.completedFiles = completedCount;
     task.downloadedBytes = Math.min(downloadedBytes, task.totalBytes);
     task.progressPercent = progressPercent;
+    task.files = [...task.files];
 
     this.notify();
   }

@@ -1,6 +1,5 @@
 import React, { useRef, useState, useMemo } from 'react';
 import type { DownloadFileItem } from '../types/downloader';
-import { estimatePathLayout } from '../utils/pretextPathLayout';
 
 interface VirtualFileListProps {
   files: DownloadFileItem[];
@@ -101,14 +100,13 @@ export const VirtualFileList: React.FC<VirtualFileListProps> = ({
           >
             {visibleFiles.map((file, idx) => {
               const absoluteIndex = startIndex + idx;
-              const pathLayout = estimatePathLayout(file.path, 420, 16);
               const filePercent = getFilePercent(file);
 
               return (
                 <div
                   key={file.id}
                   data-testid={`virtual-file-item-${absoluteIndex}`}
-                  data-line-count={pathLayout.lineCount}
+                  data-line-count={1}
                   onClick={() => onItemClick?.(file)}
                   style={{ height: `${itemHeight}px` }}
                   className={`

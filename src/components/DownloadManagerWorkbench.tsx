@@ -43,7 +43,7 @@ const VersionDownloadCard: React.FC<VersionCardProps> = ({
       }
     }
     return { pendingFiles: pending, completedFiles: completed };
-  }, [task.files]);
+  }, [task.files, task.completedFiles, task.status]);
 
   // 全部模式：正在下载与排队的资源在最前，已完成的资源自动到末尾
   const filesToDisplay = useMemo(() => {
