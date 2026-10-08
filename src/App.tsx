@@ -634,6 +634,7 @@ function App() {
             onPause={(vId) => downloadManager.pauseDownload(vId)}
             onResume={(vId) => downloadManager.resumeDownload(vId)}
             onCancel={(vId) => downloadManager.cancelDownload(vId)}
+            onRemove={(vId) => downloadManager.removeTask(vId)}
           />
         </div>
       </div>
@@ -642,19 +643,18 @@ function App() {
       <div
         className="w-full h-full flex items-center justify-between relative px-1 select-none"
       >
-        {/* 中间下载条 (order-2 视觉居中，JSX 顺序在前以满足测试契约) */}
+        {/* 中间下载条 (order-2 视觉居中，进入工作台后依然常驻显示，支持点击底栏切换/收起工作台) */}
         <div className="flex items-center justify-center flex-1 order-2 h-full" data-tauri-drag-region="false">
-          {!isDownloadManagerOpen && (
-            <DownloadStatusBar
-              // <SteamDownloadBar
-              task={downloadTask}
-              tasks={downloadTasks}
-              onClick={() => {
-                setIsLogViewOpen(false);
-                setIsDownloadManagerOpen(true);
-              }}
-            />
-          )}
+          {/* !isDownloadManagerOpen && ( */}
+          <DownloadStatusBar
+            // <SteamDownloadBar
+            task={downloadTask}
+            tasks={downloadTasks}
+            onClick={() => {
+              setIsLogViewOpen(false);
+              setIsDownloadManagerOpen((prev) => !prev);
+            }}
+          />
         </div>
 
         {/* 左侧实时日志 (order-1 视觉在左) */}

@@ -430,6 +430,10 @@ export class DownloadManager {
     }
   }
 
+  public removeTask(versionId?: string): void {
+    this.cancelDownload(versionId);
+  }
+
   public cancelDownload(versionId?: string): void {
     const targetId = versionId || this.activeVersionId;
     if (targetId && this.tasks.has(targetId)) {
