@@ -35,6 +35,7 @@ export const DownloadStatusBar: React.FC<DownloadStatusBarProps> = ({ task, task
       role="button"
       tabIndex={0}
       data-testid="bottom-download-bar"
+      data-tauri-drag-region="false"
       onClick={(e) => {
         e.stopPropagation();
         onClick();

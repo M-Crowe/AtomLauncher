@@ -378,12 +378,15 @@ export class DownloadManager {
 
     this.simulationIntervals.set(versionId, interval);
 
-    // Concurrently trigger real backend installation
+    // Concurrently trigger real backend installation (runs asynchronously off main thread)
     return executeFullVersionInstall(gameDir, versionId, versionUrl, (status) => {
       if (status.phase === 'completed') {
         // Complete
       }
-    }, source);
+    }, source).catch((err) => {
+      console.warn('后端版本安装执行提示/离线回退:', err);
+      return false;
+    });
   }
 
   public pauseDownload(versionId?: string): void {

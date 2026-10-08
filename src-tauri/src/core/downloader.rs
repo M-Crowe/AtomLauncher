@@ -153,9 +153,20 @@ pub fn transform_mirror_url(url: String, download_source: Option<String>) -> Str
     transform_download_url(&url, &source)
 }
 
-/// 导出 Tauri Command: 获取版本清单
+/// 导出 Tauri Command: 获取版本清单 (异步非阻塞，移至 Tokio 线程池执行)
+/// pub fn fetch_version_manifest
 #[tauri::command]
-pub fn fetch_version_manifest(
+pub async fn fetch_version_manifest(
+    download_source: Option<String>,
+) -> Result<VersionManifest, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        fetch_version_manifest_sync(download_source)
+    })
+    .await
+    .map_err(|e| format!("执行失败: {e}"))?
+}
+
+pub fn fetch_version_manifest_sync(
     download_source: Option<String>,
 ) -> Result<VersionManifest, String> {
     let source = download_source.unwrap_or_else(|| "bmclapi".to_string());
@@ -199,9 +210,21 @@ pub fn fetch_version_manifest(
     Ok(manifest)
 }
 
-/// 导出 Tauri Command: 获取单个版本详情并做镜像源转换
+/// 导出 Tauri Command: 获取单个版本详情并做镜像源转换 (异步非阻塞，移至 Tokio 线程池执行)
+/// pub fn fetch_version_detail
 #[tauri::command]
-pub fn fetch_version_detail(
+pub async fn fetch_version_detail(
+    version_url: String,
+    download_source: Option<String>,
+) -> Result<serde_json::Value, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        fetch_version_detail_sync(version_url, download_source)
+    })
+    .await
+    .map_err(|e| format!("执行失败: {e}"))?
+}
+
+pub fn fetch_version_detail_sync(
     version_url: String,
     download_source: Option<String>,
 ) -> Result<serde_json::Value, String> {
@@ -282,11 +305,23 @@ pub fn infer_version_java(version_id: String, declared_major: Option<u32>) -> u3
     infer_java_major_version(&version_id, declared_major)
 }
 
-/// 导出 Tauri Command: 评估版本安装完整性与缺失文件清单
-/// 充分复用 core::types 模型 (IntegrityReport, MissingLibraryInfo, MissingAssetInfo)
-/// 充分复用 core::resolver 与 core::rules (evaluate_rules, parse_rules_from_json, parse_maven_coordinate, infer_java_major_version)
+/// 导出 Tauri Command: 评估版本安装完整性与缺失文件清单 (异步非阻塞，移至 Tokio 线程池执行)
+/// pub fn resolve_version_install_plan
 #[tauri::command]
-pub fn resolve_version_install_plan(
+pub async fn resolve_version_install_plan(
+    game_dir: String,
+    version_id: String,
+    version_json: Option<serde_json::Value>,
+    download_source: Option<String>,
+) -> Result<IntegrityReport, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        resolve_version_install_plan_sync(game_dir, version_id, version_json, download_source)
+    })
+    .await
+    .map_err(|e| format!("执行失败: {e}"))?
+}
+
+pub fn resolve_version_install_plan_sync(
     game_dir: String,
     version_id: String,
     version_json: Option<serde_json::Value>,
@@ -536,9 +571,23 @@ pub fn resolve_version_install_plan(
     })
 }
 
-/// 导出 Tauri Command: 安装版本 JSON 与 Client JAR
+/// 导出 Tauri Command: 安装版本 JSON 与 Client JAR (异步非阻塞，移至 Tokio 线程池执行)
+/// pub fn install_version_jar_and_json
 #[tauri::command]
-pub fn install_version_jar_and_json(
+pub async fn install_version_jar_and_json(
+    game_dir: String,
+    version_id: String,
+    version_json: serde_json::Value,
+    download_source: Option<String>,
+) -> Result<bool, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        install_version_jar_and_json_sync(game_dir, version_id, version_json, download_source)
+    })
+    .await
+    .map_err(|e| format!("执行失败: {e}"))?
+}
+
+pub fn install_version_jar_and_json_sync(
     game_dir: String,
     version_id: String,
     version_json: serde_json::Value,
@@ -601,9 +650,22 @@ pub fn install_version_jar_and_json(
     Ok(true)
 }
 
-/// 导出 Tauri Command: 批量下载缺失的 Libraries
+/// 导出 Tauri Command: 批量下载缺失的 Libraries (异步非阻塞，移至 Tokio 线程池执行)
+/// pub fn download_missing_libraries
 #[tauri::command]
-pub fn download_missing_libraries(
+pub async fn download_missing_libraries(
+    game_dir: String,
+    missing_libraries: Vec<MissingLibraryInfo>,
+    download_source: Option<String>,
+) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        download_missing_libraries_sync(game_dir, missing_libraries, download_source)
+    })
+    .await
+    .map_err(|e| format!("执行失败: {e}"))?
+}
+
+pub fn download_missing_libraries_sync(
     game_dir: String,
     missing_libraries: Vec<MissingLibraryInfo>,
     download_source: Option<String>,
@@ -635,9 +697,23 @@ pub fn download_missing_libraries(
     Ok(downloaded_count)
 }
 
-/// 导出 Tauri Command: 批量下载缺失的 Assets 资源对象 (支持分批下载限制)
+/// 导出 Tauri Command: 批量下载缺失的 Assets 资源对象 (异步非阻塞，移至 Tokio 线程池执行)
+/// pub fn download_asset_objects
 #[tauri::command]
-pub fn download_asset_objects(
+pub async fn download_asset_objects(
+    game_dir: String,
+    asset_index_id: String,
+    download_source: Option<String>,
+    max_items: Option<usize>,
+) -> Result<usize, String> {
+    tauri::async_runtime::spawn_blocking(move || {
+        download_asset_objects_sync(game_dir, asset_index_id, download_source, max_items)
+    })
+    .await
+    .map_err(|e| format!("执行失败: {e}"))?
+}
+
+pub fn download_asset_objects_sync(
     game_dir: String,
     asset_index_id: String,
     download_source: Option<String>,

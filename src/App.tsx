@@ -350,7 +350,6 @@ function App() {
   return (
     <main
       className="grid grid-rows-[36px_minmax(0,1fr)_36px] h-screen w-screen px-9 bg-surface-app-bg select-none overflow-hidden relative"
-      data-tauri-drag-region
       onMouseDown={(e) => {
         if (e.target === e.currentTarget) {
           getCurrentWindow().startDragging();
@@ -634,16 +633,10 @@ function App() {
 
       {/* 底部状态区域：网格第三行，居中常驻下载管理，无多余外框，左侧放置实时日志 */}
       <div
-        data-tauri-drag-region
-        onMouseDown={(e) => {
-          if (e.target === e.currentTarget) {
-            getCurrentWindow().startDragging();
-          }
-        }}
         className="w-full h-full flex items-center justify-between relative px-1 select-none"
       >
         {/* 中间下载条 (order-2 视觉居中，JSX 顺序在前以满足测试契约) */}
-        <div className="flex items-center justify-center flex-1 order-2 h-full">
+        <div className="flex items-center justify-center flex-1 order-2 h-full" data-tauri-drag-region="false">
           {!isDownloadManagerOpen && (
             <DownloadStatusBar
               // <SteamDownloadBar
@@ -658,7 +651,7 @@ function App() {
         </div>
 
         {/* 左侧实时日志 (order-1 视觉在左) */}
-        <div className="flex items-center min-w-[140px] order-1 h-full">
+        <div className="flex items-center min-w-[140px] order-1 h-full" data-tauri-drag-region="false">
           {(runningPid || logs.length > 0 || launchState === "running" || launchState === "launching" || launchState === "crashed") && (
             <button
               type="button"
