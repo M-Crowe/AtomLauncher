@@ -1,3 +1,4 @@
+import React, { useEffect, useState } from 'react';
 import type { ManifestVersionEntry, DownloadTaskState } from '../types/downloader';
 import type { MinecraftVersionInfo } from '../types/launcher';
 import { inferVersionJava } from '../utils/downloadService';
