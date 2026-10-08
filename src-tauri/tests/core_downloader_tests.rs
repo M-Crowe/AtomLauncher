@@ -79,12 +79,12 @@ fn test_transform_download_url_mcbbs_rules() {
 #[test]
 fn test_uninstalled_version_plan_graceful() {
     let temp_dir = std::env::temp_dir().join("atom_test_empty_game_dir");
-    let plan = resolve_version_install_plan(
+    let plan = tauri::async_runtime::block_on(resolve_version_install_plan(
         temp_dir.to_string_lossy().to_string(),
         "1.21.999-not-installed".to_string(),
         None,
         Some("bmclapi".to_string()),
-    ).unwrap();
+    )).unwrap();
 
     assert!(!plan.is_complete);
     assert!(plan.missing_version_jar);
