@@ -76,26 +76,25 @@ test('Fix 3. Complete unification with retro pixel warm theme and elimination of
   assert.equal(sidebarContent.includes('border-stone-800'), false, 'DownloadDetailSidebar eliminated border-stone-800');
 });
 
-test('Fix 4. Embedded download progress bar at main card bottom border', () => {
+test('Fix 4. Download progress bar positioned at bottom safe area outside main card', () => {
   const appContent = readFileSync(resolve('src/App.tsx'), 'utf-8');
   const barContent = readFileSync(resolve('src/components/SteamDownloadBar.tsx'), 'utf-8');
 
-  // 1. SteamDownloadBar is embedded inside the main card container (before closing tag of card)
+  // 1. SteamDownloadBar is rendered outside the main card container (before log button, not blocking nav)
   const cardStartIdx = appContent.indexOf('bg-surface-card ring-4 ring-inset ring-border-hard');
   const barIdx = appContent.indexOf('<SteamDownloadBar');
   const logButtonIdx = appContent.indexOf('data-testid="bottom-log-status-button"');
 
   assert.ok(cardStartIdx !== -1 && barIdx !== -1 && logButtonIdx !== -1, 'Elements exist in App.tsx');
-  assert.ok(barIdx > cardStartIdx && barIdx < logButtonIdx, 'SteamDownloadBar is embedded within card container');
+  assert.ok(barIdx > cardStartIdx && barIdx < logButtonIdx, 'SteamDownloadBar is placed after main card and before log button');
 
-  // 2. SteamDownloadBar uses absolute bottom-0 docked positioning without className pollution
-  assert.ok(barContent.includes('absolute bottom-0'), 'SteamDownloadBar is anchored to bottom-0');
+  // 2. SteamDownloadBar uses fixed bottom-2 positioning in the safe area without blocking nav
+  assert.ok(barContent.includes('fixed bottom-2'), 'SteamDownloadBar is anchored to fixed bottom-2 safe area');
   assert.ok(barContent.includes('border-surface-slot'), 'SteamDownloadBar integrates border-surface-slot');
   const classNameMatch = barContent.match(/className=["']([^"']+)["']/);
   if (classNameMatch) {
     const classStr = classNameMatch[1];
-    assert.equal(classStr.includes('fixed'), false, 'className must not contain fixed');
-    assert.equal(classStr.includes('bottom-2'), false, 'className must not contain bottom-2');
+    assert.ok(classStr.includes('fixed bottom-2'), 'className must contain fixed bottom-2');
   }
 });
 

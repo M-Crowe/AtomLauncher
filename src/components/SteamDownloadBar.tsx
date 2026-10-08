@@ -17,7 +17,7 @@ export const SteamDownloadBar: React.FC<SteamDownloadBarProps> = ({ task, onClic
   const isCompleted = task.status === 'completed';
   const isPaused = task.status === 'paused';
 
-  // Replaces formerly floating fixed bottom-2 design with embedded bottom-0 docking inside primary card
+  // Positioned at fixed bottom-2 safe area (below the card) to avoid obstructing bottom navigation
   return (
     <div
       role="button"
@@ -36,15 +36,15 @@ export const SteamDownloadBar: React.FC<SteamDownloadBarProps> = ({ task, onClic
       }}
       aria-label={`下载管理器: ${task.versionId || 'Minecraft'} ${task.progressPercent}%`}
       className="
-        absolute bottom-0 left-1/2 -translate-x-1/2 z-40
+        fixed bottom-2 left-1/2 -translate-x-1/2 z-40
         flex flex-col items-center
         w-[500px] max-w-[85%]
         px-4 py-1.5
         bg-dirt-10/95 hover:bg-stone-10 active:bg-dirt-20
         text-stone-100 font-fusion text-xs
-        border-t-2 border-x-2 border-surface-slot
-        rounded-t-md
-        shadow-[0_-3px_10px_rgba(0,0,0,0.18)]
+        border-2 border-surface-slot
+        rounded-md
+        shadow-[0_4px_14px_rgba(0,0,0,0.22)]
         cursor-pointer select-none transition-all duration-200
         active:translate-y-0.5
         pointer-events-auto

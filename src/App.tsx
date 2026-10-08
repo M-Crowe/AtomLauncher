@@ -600,18 +600,18 @@ function App() {
             />
           </div>
         </div>
-
-        {/* 紧密嵌入在主卡片内部的最底端（在 bg-surface-card ring-4 ring-inset ring-border-hard 容器的底部边框处） */}
-        {!isDownloadManagerOpen && (
-          <SteamDownloadBar
-            task={downloadTask}
-            onClick={() => {
-              setIsLogViewOpen(false);
-              setIsDownloadManagerOpen(true);
-            }}
-          />
-        )}
       </div>
+
+      {/* 底部正中安全区：Steam 风格底栏下载指示条 (位于窗口底部下方，不遮挡主卡片导航栏) */}
+      {!isDownloadManagerOpen && (
+        <SteamDownloadBar
+          task={downloadTask}
+          onClick={() => {
+            setIsLogViewOpen(false);
+            setIsDownloadManagerOpen(true);
+          }}
+        />
+      )}
 
       {/* 扁平化现代设计：实时日志悬浮胶囊按钮 (位于窗口左下方，视觉风格区别于启动器复古像素界面) */}
       {(runningPid || logs.length > 0 || launchState === "running" || launchState === "launching" || launchState === "crashed") && (
