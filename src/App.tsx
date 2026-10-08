@@ -16,10 +16,11 @@ import { DownloadView } from "./components/DownloadView";
 import { DownloadDetailSidebar } from "./components/DownloadDetailSidebar";
 import { DownloadStatusBar } from "./components/DownloadStatusBar";
 import { DownloadManagerWorkbench } from "./components/DownloadManagerWorkbench";
+import { InstallConfirmModal } from "./components/InstallConfirmModal";
 import type { Account } from "./types/account";
 import { getActiveAccount, onAccountsChange } from "./utils/accountService";
 import type { LaunchState, LogEntry, MinecraftVersionInfo } from "./types/launcher";
-import type { DownloadSource, ManifestVersionEntry, DownloadTaskState } from "./types/downloader";
+import type { DownloadSource, ManifestVersionEntry, DownloadTaskState, ModLoaderType } from "./types/downloader";
 import { downloadManager } from "./utils/downloadManager";
 import { transformDownloadUrl } from "./utils/downloadService";
 import {
@@ -58,6 +59,9 @@ function App() {
   const [activeAccount, setActiveAccount] = useState<Account | null>(null);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
   const [isDownloadModalOpen, setIsDownloadModalOpen] = useState(false);
+  const [isInstallModalOpen, setIsInstallModalOpen] = useState(false);
+  const [selectedLoader, setSelectedLoader] = useState<ModLoaderType>('vanilla');
+  const [selectedLoaderVersion, setSelectedLoaderVersion] = useState<string>('');
   const [isInitialized, setIsInitialized] = useState<boolean | null>(null);
 
   // Check launcher initialization state and synchronize settings
@@ -215,31 +219,29 @@ function App() {
     return unsub;
   }, []);
 
-  const handleStartDownload = (targetVersionId?: string, targetVersionUrl?: string) => {
+  const handleStartDownload = (_targetVersionId?: string, _targetVersionUrl?: string) => {
+    setIsInstallModalOpen(true);
+  };
+
+  const handleConfirmInstall = (customName: string, _loader: ModLoaderType, _loaderVer?: string) => {
     const s = loadLauncherSettings();
     const effectiveSource = downloadSource || s.downloadSource || 'bmclapi';
-    const effectiveId =
-      targetVersionId ||
-      (currentTab === "download" && selectedManifestVersion
-        ? selectedManifestVersion.id
-        : selectedVersionId);
+    const baseId = selectedManifestVersion?.id || activeTargetVersionId || '1.21.1';
     const effectiveUrl =
-      targetVersionUrl ||
-      (currentTab === "download" && selectedManifestVersion && selectedManifestVersion.id === effectiveId
-        ? selectedManifestVersion.url
-        : transformDownloadUrl(
-            `https://piston-meta.mojang.com/v1/packages/${effectiveId}/${effectiveId}.json`,
-            effectiveSource
-          ));
+      selectedManifestVersion?.url ||
+      transformDownloadUrl(
+        `https://piston-meta.mojang.com/v1/packages/${baseId}/${baseId}.json`,
+        effectiveSource
+      );
 
     downloadManager.startDownload(
-      effectiveId,
+      customName,
       effectiveUrl,
       s.gameDir,
       (success) => {
         if (success) {
           refreshVersions();
-          setSelectedVersionId(effectiveId);
+          setSelectedVersionId(customName);
         }
       }
     );
@@ -573,6 +575,11 @@ function App() {
                   version={selectedManifestVersion}
                   installedVersions={versions}
                   downloadTask={targetTask}
+                  selectedLoader={selectedLoader}
+                  onSelectLoader={(loader, ver) => {
+                    setSelectedLoader(loader);
+                    if (ver) setSelectedLoaderVersion(ver);
+                  }}
                   onTriggerDownload={() => handleStartDownload(activeTargetVersionId)}
                 />
               </div>
@@ -728,6 +735,28 @@ function App() {
           refreshVersions();
           setSelectedVersionId(vId);
         }}
+      />
+
+      <InstallConfirmModal
+        isOpen={isInstallModalOpen}
+        onClose={() => setIsInstallModalOpen(false)}
+        version={
+          selectedManifestVersion ||
+          (activeTargetVersionId
+            ? {
+                id: activeTargetVersionId,
+                type: 'release',
+                url: '',
+                time: '',
+                releaseTime: '',
+                sha1: '',
+              }
+            : null)
+        }
+        initialLoader={selectedLoader}
+        initialLoaderVersion={selectedLoaderVersion}
+        installedVersions={versions}
+        onConfirm={handleConfirmInstall}
       />
     </main>
   );

@@ -312,11 +312,6 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
                         ? `已暂停 ${task?.progressPercent}%`
                         : '未安装'}
                     </span>
-                    {isSelected && (
-                      <span className="font-fusion text-[10px] text-grass-80 font-bold">
-                        当前选中
-                      </span>
-                    )}
                   </div>
                 </div>
               );

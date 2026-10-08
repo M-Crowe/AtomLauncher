@@ -71,4 +71,11 @@ export interface DownloadTaskState {
   createdAt?: number;
 }
 
+export type ModLoaderType = 'vanilla' | 'fabric' | 'neoforge' | 'forge' | 'quilt';
+
+export interface ModLoaderSelection {
+  loader: ModLoaderType;
+  loaderVersion?: string;
+}
+
 export type { IntegrityReport, MissingLibraryInfo, MissingAssetInfo, DownloadSource };
