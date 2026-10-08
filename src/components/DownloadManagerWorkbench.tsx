@@ -242,10 +242,25 @@ export const DownloadManagerWorkbench: React.FC<DownloadManagerWorkbenchProps> =
   onResume,
   onCancel,
 }) => {
+  // 活跃任务（下载中）排在最前面；如果多个活跃，按下载顺序（创建时间）排列；已完成的任务自动置底
   const activeTasks = useMemo(() => {
-    if (tasks && tasks.length > 0) return tasks;
-    if (task && task.versionId) return [task];
-    return [];
+    const list = tasks && tasks.length > 0 ? [...tasks] : (task && task.versionId ? [task] : []);
+    return list.sort((a, b) => {
+      // 状态权重：下载中 (0) > 暂停 (1) > 其他未完成 (2) > 全部完成 (3)
+      const getWeight = (t: DownloadTaskState) => {
+        if (t.status === 'downloading') return 0;
+        if (t.status === 'paused') return 1;
+        if (t.status !== 'completed') return 2;
+        return 3;
+      };
+      const wa = getWeight(a);
+      const wb = getWeight(b);
+      if (wa !== wb) return wa - wb;
+      // 状态相同时（例如多个活跃下载中，或多个已完成）：按开始下载时间升序（先开始的在先）
+      const timeA = a.createdAt || 0;
+      const timeB = b.createdAt || 0;
+      return timeA - timeB;
+    });
   }, [tasks, task]);
 
   const [expandedMap, setExpandedMap] = useState<Record<string, boolean>>({});

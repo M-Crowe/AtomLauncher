@@ -68,6 +68,7 @@ export interface DownloadTaskState {
   totalFiles: number;
   error?: string;
   files: DownloadFileItem[];
+  createdAt?: number;
 }
 
 export type { IntegrityReport, MissingLibraryInfo, MissingAssetInfo, DownloadSource };

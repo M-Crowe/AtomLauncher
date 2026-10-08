@@ -1,9 +1,9 @@
-import React, { useState, useEffect, useMemo } from 'react';
 import type {
   DownloadSource,
   ManifestVersionEntry,
   VersionManifest,
   DownloadCategoryFilter,
+  DownloadTaskState,
 } from '../types/downloader';
 import type { MinecraftVersionInfo } from '../types/launcher';
 import { fetchVersionManifest } from '../utils/downloadService';
@@ -13,6 +13,7 @@ interface DownloadViewProps {
   onSelectVersion: (version: ManifestVersionEntry) => void;
   installedVersions: MinecraftVersionInfo[];
   downloadSource: DownloadSource;
+  downloadTasks?: DownloadTaskState[];
   onChangeDownloadSource: (source: DownloadSource) => void;
 }
 
@@ -21,6 +22,7 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
   onSelectVersion,
   installedVersions,
   downloadSource,
+  downloadTasks,
   onChangeDownloadSource,
 }) => {
   const [manifest, setManifest] = useState<VersionManifest | null>(null);
@@ -250,6 +252,9 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
             {filteredVersions.map((v) => {
               const isSelected = selectedVersion?.id === v.id;
               const installed = isVersionInstalled(v.id);
+              const task = downloadTasks?.find((t) => t.versionId === v.id);
+              const isDownloading = task?.status === 'downloading';
+              const isPaused = task?.status === 'paused';
 
               return (
                 <div
@@ -291,10 +296,20 @@ export const DownloadView: React.FC<DownloadViewProps> = ({
                       className={`font-fusion text-[10px] px-2 py-0.5 rounded ${
                         installed
                           ? 'bg-grass-80/15 text-grass-80 ring-1 ring-grass-80/50 font-bold'
+                          : isDownloading
+                          ? 'bg-amber-600 text-white font-bold animate-pulse'
+                          : isPaused
+                          ? 'bg-stone-60 text-white font-bold'
                           : 'bg-dirt-20/40 text-stone-80 ring-1 ring-surface-slot/30'
                       }`}
                     >
-                      {installed ? '本地已安装' : '未安装'}
+                      {installed
+                        ? '本地已安装'
+                        : isDownloading
+                        ? `下载中 ${task?.progressPercent}%`
+                        : isPaused
+                        ? `已暂停 ${task?.progressPercent}%`
+                        : '未安装'}
                     </span>
                     {isSelected && (
                       <span className="font-fusion text-[10px] text-grass-80 font-bold">

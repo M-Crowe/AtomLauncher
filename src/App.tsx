@@ -252,6 +252,11 @@ function App() {
   const isTargetInstalled = versions.some((v) => v.id === activeTargetVersionId);
   const isDownloadMode = currentTab === "download" || !isTargetInstalled;
 
+  const targetTask = downloadTasks.find((t) => t.versionId === activeTargetVersionId);
+  const isTargetDownloading = targetTask?.status === "downloading";
+  const isTargetPaused = targetTask?.status === "paused";
+  const targetProgress = targetTask?.progressPercent || 0;
+
   const handleLaunch = async () => {
     setLaunchState("checking");
     const s = loadLauncherSettings();
@@ -422,6 +427,7 @@ function App() {
                   onSelectVersion={(v) => setSelectedManifestVersion(v)}
                   installedVersions={versions}
                   downloadSource={downloadSource}
+                  downloadTasks={downloadTasks}
                   onChangeDownloadSource={(src) => {
                     setDownloadSource(src);
                     const current = loadLauncherSettings();
@@ -566,7 +572,8 @@ function App() {
                 <DownloadDetailSidebar
                   version={selectedManifestVersion}
                   installedVersions={versions}
-                  onTriggerDownload={handleStartDownload}
+                  downloadTask={targetTask}
+                  onTriggerDownload={() => handleStartDownload(activeTargetVersionId)}
                 />
               </div>
             </div>
@@ -587,12 +594,12 @@ function App() {
                 onKill={handleKill}
                 onOpenSettings={() => setCurrentTab("settings")}
                 isDownloadMode={isDownloadMode}
-                isDownloading={downloadTask.status === "downloading"}
-                downloadProgress={downloadTask.progressPercent}
-                isDownloadPaused={downloadTask.status === "paused"}
-                activeDownloadingVersion={downloadTask.versionId}
-                onResumeDownload={() => downloadManager.resumeDownload()}
-                onDownload={handleStartDownload}
+                isDownloading={isTargetDownloading}
+                downloadProgress={targetProgress}
+                isDownloadPaused={isTargetPaused}
+                activeDownloadingVersion={targetTask?.versionId || activeTargetVersionId}
+                onResumeDownload={() => downloadManager.resumeDownload(activeTargetVersionId)}
+                onDownload={() => handleStartDownload(activeTargetVersionId)}
               />
             </div>
           </div>

@@ -289,6 +289,7 @@ export class DownloadManager {
       completedFiles: 0,
       totalFiles: fileItems.length,
       files: fileItems,
+      createdAt: Date.now(),
     };
 
     this.tasks.set(versionId, newTask);

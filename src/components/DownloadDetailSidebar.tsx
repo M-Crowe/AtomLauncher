@@ -1,5 +1,4 @@
-import React, { useEffect, useState } from 'react';
-import type { ManifestVersionEntry } from '../types/downloader';
+import type { ManifestVersionEntry, DownloadTaskState } from '../types/downloader';
 import type { MinecraftVersionInfo } from '../types/launcher';
 import { inferVersionJava } from '../utils/downloadService';
 
@@ -7,12 +6,14 @@ interface DownloadDetailSidebarProps {
   version: ManifestVersionEntry | null;
   installedVersions: MinecraftVersionInfo[];
   onTriggerDownload: () => void;
+  downloadTask?: DownloadTaskState;
 }
 
 export const DownloadDetailSidebar: React.FC<DownloadDetailSidebarProps> = ({
   version,
   installedVersions,
   onTriggerDownload,
+  downloadTask,
 }) => {
   const [recommendedJava, setRecommendedJava] = useState<number | null>(null);
 
@@ -143,6 +144,29 @@ export const DownloadDetailSidebar: React.FC<DownloadDetailSidebarProps> = ({
           <span className="text-[11px] text-grass-80 font-bold">
             该版本已在本地安装，可直接启动游戏
           </span>
+        ) : downloadTask?.status === 'downloading' ? (
+          <div className="flex flex-col items-center gap-1">
+            <span className="text-[11px] text-amber-700 font-bold animate-pulse">
+              该版本正在高速下载中 ({downloadTask.progressPercent}%)
+            </span>
+            <span className="text-[10px] text-stone-60 font-mono">
+              实时速度: {downloadTask.speedMBs > 0 ? `${downloadTask.speedMBs.toFixed(1)} MB/s` : '--'}
+            </span>
+          </div>
+        ) : downloadTask?.status === 'paused' ? (
+          <div className="flex flex-col items-center gap-1.5">
+            <span className="text-[11px] text-stone-70 font-bold">
+              该版本已暂停 ({downloadTask.progressPercent}%)
+            </span>
+            <button
+              type="button"
+              data-testid="sidebar-download-button"
+              onClick={onTriggerDownload}
+              className="px-4 py-1.5 bg-stone-700 hover:bg-stone-600 active:bg-stone-800 text-white text-xs rounded font-fusion font-bold cursor-pointer transition-colors shadow-sm"
+            >
+              继续下载此版本
+            </button>
+          </div>
         ) : (
           <>
             <span className="text-[11px] text-stone-60">
