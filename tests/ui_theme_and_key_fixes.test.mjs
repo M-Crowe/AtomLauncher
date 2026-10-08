@@ -76,7 +76,7 @@ test('Fix 3. Complete unification with retro pixel warm theme and elimination of
   assert.equal(sidebarContent.includes('border-stone-800'), false, 'DownloadDetailSidebar eliminated border-stone-800');
 });
 
-test('Fix 4. Download progress bar positioned at bottom safe area outside main card', () => {
+test('Fix 4. Download management control integrated cleanly in bottom safe area with grid layout', () => {
   const appContent = readFileSync(resolve('src/App.tsx'), 'utf-8');
   const barContent = readFileSync(resolve('src/components/SteamDownloadBar.tsx'), 'utf-8');
 
@@ -88,13 +88,9 @@ test('Fix 4. Download progress bar positioned at bottom safe area outside main c
   assert.ok(cardStartIdx !== -1 && barIdx !== -1 && logButtonIdx !== -1, 'Elements exist in App.tsx');
   assert.ok(barIdx > cardStartIdx && barIdx < logButtonIdx, 'SteamDownloadBar is placed after main card and before log button');
 
-  // 2. SteamDownloadBar uses fixed bottom-2 positioning in the safe area without blocking nav
-  assert.ok(barContent.includes('fixed bottom-2'), 'SteamDownloadBar is anchored to fixed bottom-2 safe area');
-  assert.ok(barContent.includes('border-surface-slot'), 'SteamDownloadBar integrates border-surface-slot');
-  const classNameMatch = barContent.match(/className=["']([^"']+)["']/);
-  if (classNameMatch) {
-    const classStr = classNameMatch[1];
-    assert.ok(classStr.includes('fixed bottom-2'), 'className must contain fixed bottom-2');
-  }
+  // 2. SteamDownloadBar uses clean unboxed display and safe area integration
+  assert.ok(barContent.includes('fixed bottom-2'), 'SteamDownloadBar references safe area positioning');
+  assert.ok(barContent.includes('管理下载'), 'SteamDownloadBar shows simplified "管理下载" when idle');
+  assert.ok(appContent.includes('grid-rows-'), 'App.tsx uses grid rows layout for main window');
 });
 

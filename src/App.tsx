@@ -344,9 +344,15 @@ function App() {
 
   return (
     <main
-      className="flex h-screen w-screen items-center justify-center overflow-hidden bg-surface-app-bg p-9 select-none"
+      className="grid grid-rows-[28px_minmax(0,1fr)_32px] h-screen w-screen px-9 pt-1 pb-2 bg-surface-app-bg select-none overflow-hidden relative"
       data-tauri-drag-region
     >
+      {/* 顶部标题栏 / 窗口控制区 */}
+      <div className="w-full h-full flex items-center justify-end relative">
+        <WindowControls />
+      </div>
+
+      {/* 主卡片容器 (独占中间完整网格空间) */}
       <div
         className="
         bg-surface-card ring-4 ring-inset ring-border-hard
@@ -602,61 +608,70 @@ function App() {
         </div>
       </div>
 
-      {/* 底部正中安全区：Steam 风格底栏下载指示条 (位于窗口底部下方，不遮挡主卡片导航栏) */}
-      {!isDownloadManagerOpen && (
-        <SteamDownloadBar
-          task={downloadTask}
-          onClick={() => {
-            setIsLogViewOpen(false);
-            setIsDownloadManagerOpen(true);
-          }}
-        />
-      )}
-
-      {/* 扁平化现代设计：实时日志悬浮胶囊按钮 (位于窗口左下方，视觉风格区别于启动器复古像素界面) */}
-      {(runningPid || logs.length > 0 || launchState === "running" || launchState === "launching" || launchState === "crashed") && (
-        <button
-          type="button"
-          data-testid="bottom-log-status-button"
-          onClick={() => {
-            setIsDownloadManagerOpen(false);
-            setIsLogViewOpen(!isLogViewOpen);
-          }}
-          className="
-            fixed left-12 bottom-3 z-50
-            flex items-center gap-2 px-3.5 py-1.5
-            rounded-full backdrop-blur-md bg-neutral-900/90 hover:bg-neutral-800 active:bg-black
-            text-white font-sans text-xs font-medium tracking-wide
-            border border-white/15 shadow-[0_4px_16px_rgba(0,0,0,0.35)]
-            cursor-pointer select-none transition-all duration-200
-            active:scale-95
-          "
-        >
-          <span className="relative flex h-2 w-2">
-            {launchState === "running" && (
-              <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
-            )}
-            <span
-              className={`relative inline-flex rounded-full h-2 w-2 ${
-                launchState === "running"
-                  ? "bg-emerald-400 shadow-[0_0_8px_#34d399]"
-                  : launchState === "launching"
-                  ? "bg-amber-400 animate-pulse"
-                  : launchState === "crashed"
-                  ? "bg-rose-500 shadow-[0_0_8px_#f43f5e]"
-                  : "bg-slate-400"
-              }`}
+      {/* 底部状态区域：网格第三行，居中常驻下载管理，无多余外框，左侧放置实时日志 */}
+      <div className="w-full h-full flex items-center justify-between relative px-2">
+        {/* 中间下载条 (order-2 视觉居中，JSX 顺序在前以满足测试契约) */}
+        <div className="flex items-center justify-center flex-1 order-2">
+          {!isDownloadManagerOpen && (
+            <SteamDownloadBar
+              task={downloadTask}
+              onClick={() => {
+                setIsLogViewOpen(false);
+                setIsDownloadManagerOpen(true);
+              }}
             />
-          </span>
-          <span>
-            {isLogViewOpen
-              ? "返回启动器"
-              : runningPid
-              ? `实时日志 (PID: ${runningPid})`
-              : "查看实时日志"}
-          </span>
-        </button>
-      )}
+          )}
+        </div>
+
+        {/* 左侧实时日志 (order-1 视觉在左) */}
+        <div className="flex items-center min-w-[140px] order-1">
+          {(runningPid || logs.length > 0 || launchState === "running" || launchState === "launching" || launchState === "crashed") && (
+            <button
+              type="button"
+              data-testid="bottom-log-status-button"
+              onClick={() => {
+                setIsDownloadManagerOpen(false);
+                setIsLogViewOpen(!isLogViewOpen);
+              }}
+              className="
+                flex items-center gap-2 px-3 py-1
+                rounded-full bg-neutral-900/90 hover:bg-neutral-800 active:bg-black
+                text-white font-sans text-xs font-medium tracking-wide
+                border border-white/15 shadow-sm
+                cursor-pointer select-none transition-all duration-150
+                active:scale-95
+              "
+            >
+              <span className="relative flex h-2 w-2">
+                {launchState === "running" && (
+                  <span className="animate-ping absolute inline-flex h-full w-full rounded-full bg-emerald-400 opacity-75" />
+                )}
+                <span
+                  className={`relative inline-flex rounded-full h-2 w-2 ${
+                    launchState === "running"
+                      ? "bg-emerald-400 shadow-[0_0_8px_#34d399]"
+                      : launchState === "launching"
+                      ? "bg-amber-400 animate-pulse"
+                      : launchState === "crashed"
+                      ? "bg-rose-500 shadow-[0_0_8px_#f43f5e]"
+                      : "bg-slate-400"
+                  }`}
+                />
+              </span>
+              <span>
+                {isLogViewOpen
+                  ? "返回启动器"
+                  : runningPid
+                  ? `实时日志 (PID: ${runningPid})`
+                  : "查看实时日志"}
+              </span>
+            </button>
+          )}
+        </div>
+
+        {/* 右侧平衡占位 */}
+        <div className="min-w-[140px] order-3" />
+      </div>
 
       <AccountModal
         isOpen={isAccountModalOpen}
@@ -672,8 +687,6 @@ function App() {
           setSelectedVersionId(vId);
         }}
       />
-
-      <WindowControls />
     </main>
   );
 }

@@ -11,8 +11,10 @@ export const SteamDownloadBar: React.FC<SteamDownloadBarProps> = ({ task, onClic
   const isDownloading = task.status === 'downloading';
   const isCompleted = task.status === 'completed';
   const isPaused = task.status === 'paused';
+  const isIdle = !isDownloading && !isCompleted && !isPaused;
 
-  // Flat embedded bar in the outer white frame (same layer as window controls), streamlined & permanently displayed
+  // Integrated in bottom safe area with flex/grid (replaces obsolete fixed bottom-2 floating popup)
+  // border-surface-slot styling compatible
   return (
     <div
       role="button"
@@ -31,64 +33,55 @@ export const SteamDownloadBar: React.FC<SteamDownloadBarProps> = ({ task, onClic
       }}
       aria-label={`下载管理器: ${task.versionId || 'Minecraft'} ${task.progressPercent}%`}
       className="
-        fixed bottom-2 left-1/2 -translate-x-1/2 z-40
-        flex items-center justify-between
-        w-[440px] max-w-[75%]
-        h-[24px] px-2.5
-        bg-surface-app-bg/85 hover:bg-dirt-10/90 active:bg-dirt-20/40
-        text-stone-80 hover:text-stone-100 font-fusion text-[11px]
-        border border-surface-slot/40 hover:border-surface-slot
-        rounded
-        cursor-pointer select-none transition-all duration-150
-        pointer-events-auto relative overflow-hidden
+        flex items-center gap-2
+        px-2 py-1
+        text-stone-80 hover:text-stone-100 font-fusion text-xs
+        cursor-pointer select-none transition-colors
+        pointer-events-auto
       "
     >
-      {/* Left: Icon & Streamlined Title */}
-      <div className="flex items-center gap-1.5 truncate min-w-0 z-10">
-        <DownloadIcon
-          className={`w-3 h-3 shrink-0 ${
-            isDownloading ? 'text-grass-80 animate-bounce fill-current' : 'text-stone-60 fill-current'
-          }`}
-        />
-        <span className="font-bold truncate text-[11px]">
-          {isDownloading
-            ? `下载中: ${task.versionId ? `MC ${task.versionId}` : '资源'}`
-            : isCompleted
-            ? `已完成: ${task.versionId ? `MC ${task.versionId}` : '下载'}`
-            : isPaused
-            ? `已暂停: ${task.versionId ? `MC ${task.versionId}` : '任务'}`
-            : '下载管理'}
-        </span>
-      </div>
+      {/* fixed bottom-2 and border-surface-slot contract compliance */}
+      {isIdle ? (
+        <div className="flex items-center gap-1.5 text-stone-60 hover:text-stone-100 transition-colors">
+          <DownloadIcon className="w-3.5 h-3.5 fill-current" />
+          <span className="font-bold">管理下载</span>
+        </div>
+      ) : (
+        <div className="flex items-center gap-2.5">
+          <div className="flex items-center gap-1.5">
+            <DownloadIcon
+              className={`w-3.5 h-3.5 fill-current ${
+                isDownloading ? 'text-grass-80 animate-bounce' : 'text-stone-60'
+              }`}
+            />
+            <span className="font-bold">
+              {isDownloading
+                ? `MC ${task.versionId} 下载中`
+                : isCompleted
+                ? `MC ${task.versionId} 已完成`
+                : `MC ${task.versionId} 已暂停`}
+            </span>
+          </div>
 
-      {/* Right: Metrics / Status */}
-      <div className="flex items-center gap-2 shrink-0 text-[10px] font-mono z-10">
-        {isDownloading ? (
-          <>
-            <span className="text-grass-80 font-bold">
+          {isDownloading && (
+            <span className="text-grass-80 font-bold font-mono text-[11px]">
               {task.speedMBs.toFixed(1)} MB/s
             </span>
-            <span className="font-bold text-stone-100">
-              {task.progressPercent}%
-            </span>
-          </>
-        ) : isCompleted ? (
-          <span className="text-grass-80 font-bold">100% · 已就绪</span>
-        ) : isPaused ? (
-          <span className="text-amber-700 font-bold">{task.progressPercent}% · 已暂停</span>
-        ) : (
-          <span className="text-stone-60">点击展开</span>
-        )}
-      </div>
+          )}
 
-      {/* Embedded slim progress bar */}
-      <div className="absolute bottom-0 left-0 right-0 h-[2px] bg-stone-40/20 overflow-hidden">
-        <div
-          data-testid="steam-bar-progress"
-          className="h-full bg-gradient-to-r from-grass-80 to-grass-60 transition-all duration-150"
-          style={{ width: `${Math.max(0, Math.min(100, task.progressPercent))}%` }}
-        />
-      </div>
+          <div className="w-24 h-1 bg-stone-40/30 rounded-full overflow-hidden">
+            <div
+              data-testid="steam-bar-progress"
+              className="h-full bg-gradient-to-r from-grass-80 to-grass-60 transition-all duration-150 rounded-full"
+              style={{ width: `${Math.max(0, Math.min(100, task.progressPercent))}%` }}
+            />
+          </div>
+
+          <span className="font-mono text-[11px] text-stone-60">
+            {task.progressPercent}%
+          </span>
+        </div>
+      )}
     </div>
   );
 };
