@@ -1,4 +1,5 @@
 import { useEffect, useState } from "react";
+import { getCurrentWindow } from "@tauri-apps/api/window";
 import "./App.css";
 import WindowControls from "./components/WindowControls";
 import BottomNav, { type NavValue } from "./components/BottomNav";
@@ -344,11 +345,24 @@ function App() {
 
   return (
     <main
-      className="grid grid-rows-[28px_minmax(0,1fr)_32px] h-screen w-screen px-9 pt-1 pb-2 bg-surface-app-bg select-none overflow-hidden relative"
+      className="grid grid-rows-[36px_minmax(0,1fr)_36px] h-screen w-screen px-9 bg-surface-app-bg select-none overflow-hidden relative"
       data-tauri-drag-region
+      onMouseDown={(e) => {
+        if (e.target === e.currentTarget) {
+          getCurrentWindow().startDragging();
+        }
+      }}
     >
-      {/* 顶部标题栏 / 窗口控制区 */}
-      <div className="w-full h-full flex items-center justify-end relative">
+      {/* 顶部标题栏 / 窗口控制区 (高度 36px，居中垂直对齐，与卡片 36px 边距完全对称) */}
+      <div
+        data-tauri-drag-region
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) {
+            getCurrentWindow().startDragging();
+          }
+        }}
+        className="w-full h-full flex items-center justify-end relative select-none"
+      >
         <WindowControls />
       </div>
 
@@ -609,9 +623,17 @@ function App() {
       </div>
 
       {/* 底部状态区域：网格第三行，居中常驻下载管理，无多余外框，左侧放置实时日志 */}
-      <div className="w-full h-full flex items-center justify-between relative px-2">
+      <div
+        data-tauri-drag-region
+        onMouseDown={(e) => {
+          if (e.target === e.currentTarget) {
+            getCurrentWindow().startDragging();
+          }
+        }}
+        className="w-full h-full flex items-center justify-between relative px-1 select-none"
+      >
         {/* 中间下载条 (order-2 视觉居中，JSX 顺序在前以满足测试契约) */}
-        <div className="flex items-center justify-center flex-1 order-2">
+        <div className="flex items-center justify-center flex-1 order-2 h-full">
           {!isDownloadManagerOpen && (
             <SteamDownloadBar
               task={downloadTask}
@@ -624,7 +646,7 @@ function App() {
         </div>
 
         {/* 左侧实时日志 (order-1 视觉在左) */}
-        <div className="flex items-center min-w-[140px] order-1">
+        <div className="flex items-center min-w-[140px] order-1 h-full">
           {(runningPid || logs.length > 0 || launchState === "running" || launchState === "launching" || launchState === "crashed") && (
             <button
               type="button"
@@ -670,7 +692,15 @@ function App() {
         </div>
 
         {/* 右侧平衡占位 */}
-        <div className="min-w-[140px] order-3" />
+        <div
+          data-tauri-drag-region
+          onMouseDown={(e) => {
+            if (e.target === e.currentTarget) {
+              getCurrentWindow().startDragging();
+            }
+          }}
+          className="min-w-[140px] order-3 h-full"
+        />
       </div>
 
       <AccountModal

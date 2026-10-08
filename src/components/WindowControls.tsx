@@ -6,7 +6,7 @@ const currentWindow = getCurrentWindow();
 
 export default function WindowControls() {
   return (
-    <div className="absolute top-2 right-9 flex gap-2">
+    <div className="flex items-center gap-2">
       <button
         type="button"
         aria-label="最小化"

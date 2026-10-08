@@ -2,6 +2,7 @@ import { prepareWithSegments, layoutWithLines } from '@chenglou/pretext';
 
 // Cache for prepared segments to avoid repeated text tokenization
 const segmentsCache = new Map<string, ReturnType<typeof prepareWithSegments>>();
+const layoutResultCache = new Map<string, PathLayoutResult>();
 
 export interface PathLayoutResult {
   lines: Array<{ text: string; width: number }>;
@@ -23,6 +24,12 @@ export function estimatePathLayout(
     return { lines: [], lineCount: 1, measuredHeight: lineHeight };
   }
 
+  const resultKey = `${font}::${maxWidth}::${path}`;
+  const cachedResult = layoutResultCache.get(resultKey);
+  if (cachedResult) {
+    return cachedResult;
+  }
+
   const cacheKey = `${font}::${path}`;
   try {
     let prepared = segmentsCache.get(cacheKey);
@@ -35,11 +42,13 @@ export function estimatePathLayout(
     const lineCount = Math.max(1, layout.lines.length);
     const measuredHeight = Math.max(lineHeight, lineCount * lineHeight);
 
-    return {
+    const result: PathLayoutResult = {
       lines: layout.lines,
       lineCount,
       measuredHeight,
     };
+    layoutResultCache.set(resultKey, result);
+    return result;
   } catch {
     // Robust fallback if OffscreenCanvas or DOM context is unavailable in tests/headless
     const estCharWidth = 7.5;

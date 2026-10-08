@@ -273,7 +273,7 @@ export class DownloadManager {
 
     // Fast-stream download simulation through throttle pool
     let activeIndex = 0;
-    const batchChunkSize = 45; // Emulate intense high-concurrency downloads
+    const batchChunkSize = 100; // Efficient chunking preventing event loop saturation
 
     if (this.simulationInterval) {
       clearInterval(this.simulationInterval);
@@ -325,7 +325,7 @@ export class DownloadManager {
         this.notify();
         onFinish?.(true);
       }
-    }, 50);
+    }, 150);
 
     // Concurrently trigger real backend installation
     return executeFullVersionInstall(gameDir, versionId, versionUrl, (status) => {

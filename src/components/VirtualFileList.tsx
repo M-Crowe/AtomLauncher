@@ -49,11 +49,11 @@ export const VirtualFileList: React.FC<VirtualFileListProps> = ({
   }, [effectiveScrollTop, files, totalCount, height, itemHeight, buffer]);
 
   React.useEffect(() => {
-    if (containerRef.current && containerRef.current.scrollTop > maxScrollTop) {
+    if (containerRef.current && containerRef.current.scrollTop > maxScrollTop && scrollTop !== maxScrollTop) {
       containerRef.current.scrollTop = maxScrollTop;
       setScrollTop(maxScrollTop);
     }
-  }, [maxScrollTop]);
+  }, [maxScrollTop, scrollTop]);
 
   const handleScroll = (e: React.UIEvent<HTMLDivElement>) => {
     setScrollTop(e.currentTarget.scrollTop);
