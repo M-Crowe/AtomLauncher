@@ -164,8 +164,17 @@ export class BatchThrottlePool {
   }
 }
 
+export type DownloadManagerListener = (state: DownloadTaskState, tasks: DownloadTaskState[]) => void;
+
 export class DownloadManager {
-  private state: DownloadTaskState = {
+  private tasks: Map<string, DownloadTaskState> = new Map();
+  private activeVersionId: string = '';
+  private listeners: Set<DownloadManagerListener> = new Set();
+  private throttlePools: Map<string, BatchThrottlePool> = new Map();
+  private simulationIntervals: Map<string, ReturnType<typeof setInterval>> = new Map();
+  private isSimulatingMap: Map<string, boolean> = new Map();
+
+  private defaultState: DownloadTaskState = {
     versionId: '',
     status: 'idle',
     phase: 'idle',
@@ -179,40 +188,45 @@ export class DownloadManager {
     files: [],
   };
 
-  private listeners: Set<(state: DownloadTaskState) => void> = new Set();
-  private throttlePool: BatchThrottlePool;
-  private isSimulating: boolean = false;
-  private simulationInterval: ReturnType<typeof setInterval> | null = null;
-
-  constructor() {
-    this.throttlePool = new BatchThrottlePool((batch) => {
-      this.applyBatchUpdates(batch);
-    }, 100);
-  }
-
   public getState(): DownloadTaskState {
-    return { ...this.state };
+    if (this.activeVersionId && this.tasks.has(this.activeVersionId)) {
+      return { ...this.tasks.get(this.activeVersionId)! };
+    }
+    const all = Array.from(this.tasks.values());
+    if (all.length > 0) {
+      const downloading = all.find((t) => t.status === 'downloading');
+      return { ...(downloading || all[0]) };
+    }
+    return { ...this.defaultState };
   }
 
-  public subscribe(listener: (state: DownloadTaskState) => void): () => void {
+  public getTasks(): DownloadTaskState[] {
+    return Array.from(this.tasks.values());
+  }
+
+  public subscribe(listener: DownloadManagerListener): () => void {
     this.listeners.add(listener);
-    listener(this.getState());
+    listener(this.getState(), this.getTasks());
     return () => {
       this.listeners.delete(listener);
     };
   }
 
   private notify(): void {
-    const snapshot = this.getState();
-    this.listeners.forEach((fn) => fn(snapshot));
+    const active = this.getState();
+    const all = this.getTasks();
+    this.listeners.forEach((fn) => fn(active, all));
   }
 
-  private applyBatchUpdates(batch: Map<string, Partial<DownloadFileItem>>): void {
-    let completedCount = this.state.completedFiles;
-    let downloadedBytes = this.state.downloadedBytes;
+  private applyBatchUpdates(versionId: string, batch: Map<string, Partial<DownloadFileItem>>): void {
+    const task = this.tasks.get(versionId);
+    if (!task) return;
 
-    for (let i = 0; i < this.state.files.length; i++) {
-      const file = this.state.files[i];
+    let completedCount = task.completedFiles;
+    let downloadedBytes = task.downloadedBytes;
+
+    for (let i = 0; i < task.files.length; i++) {
+      const file = task.files[i];
       const update = batch.get(file.id);
       if (update) {
         if (update.downloaded !== undefined) {
@@ -230,15 +244,13 @@ export class DownloadManager {
       }
     }
 
-    const totalFiles = this.state.totalFiles || 1;
+    const totalFiles = task.totalFiles || 1;
     const progressPercent = Math.min(100, Math.floor((completedCount / totalFiles) * 100));
 
-    this.state = {
-      ...this.state,
-      completedFiles: completedCount,
-      downloadedBytes: Math.min(downloadedBytes, this.state.totalBytes),
-      progressPercent,
-    };
+    task.completedFiles = completedCount;
+    task.downloadedBytes = Math.min(downloadedBytes, task.totalBytes);
+    task.progressPercent = progressPercent;
+
     this.notify();
   }
 
@@ -252,11 +264,19 @@ export class DownloadManager {
     const gameDir = customGameDir || settings.gameDir;
     const source = settings.downloadSource || 'bmclapi';
 
-    // Generate ~3,200+ Minecraft items for true O(1) virtual scrolling verification
+    // If version is already downloading, switch active
+    const existing = this.tasks.get(versionId);
+    if (existing && existing.status === 'downloading') {
+      this.activeVersionId = versionId;
+      this.notify();
+      return Promise.resolve(true);
+    }
+
+    // Generate files for this version
     const fileItems = generateMinecraftFileList(versionId, 3250);
     const totalBytes = fileItems.reduce((acc, f) => acc + f.size, 0);
 
-    this.state = {
+    const newTask: DownloadTaskState = {
       versionId,
       status: 'downloading',
       phase: 'details',
@@ -269,22 +289,33 @@ export class DownloadManager {
       totalFiles: fileItems.length,
       files: fileItems,
     };
+
+    this.tasks.set(versionId, newTask);
+    this.activeVersionId = versionId;
+
+    // Create throttle pool for this version
+    const pool = new BatchThrottlePool((batch) => {
+      this.applyBatchUpdates(versionId, batch);
+    }, 100);
+    this.throttlePools.set(versionId, pool);
+
     this.notify();
 
     // Fast-stream download simulation through throttle pool
     let activeIndex = 0;
     let lastSampleTime = Date.now();
-    let lastSampleBytes = 0;
 
-    if (this.simulationInterval) {
-      clearInterval(this.simulationInterval);
+    const existingInterval = this.simulationIntervals.get(versionId);
+    if (existingInterval) {
+      clearInterval(existingInterval);
     }
 
-    this.isSimulating = true;
-    this.simulationInterval = setInterval(() => {
-      if (this.state.status === 'paused' || !this.isSimulating) return;
+    this.isSimulatingMap.set(versionId, true);
+    const interval = setInterval(() => {
+      const currentTask = this.tasks.get(versionId);
+      if (!currentTask || currentTask.status === 'paused' || !this.isSimulatingMap.get(versionId)) return;
 
-      const files = this.state.files;
+      const files = currentTask.files;
       // Realistically meter throughput (~7.5-8.8 MB/s, strictly capped below 10MB/s max bandwidth)
       const targetChunkBytes = 1100000 + Math.floor((Math.random() * 200000) - 100000);
       let accumulatedBytes = 0;
@@ -306,7 +337,7 @@ export class DownloadManager {
 
       for (let i = activeIndex; i < end; i++) {
         const item = files[i];
-        this.throttlePool.enqueue(item.id, {
+        pool.enqueue(item.id, {
           status: 'completed',
           downloaded: item.size,
           speed: formattedSpeed,
@@ -315,7 +346,6 @@ export class DownloadManager {
 
       activeIndex = end;
       lastSampleTime = now;
-      lastSampleBytes = this.state.downloadedBytes;
 
       // Update phase text
       let phase: InstallProgressPhase = 'libraries';
@@ -328,24 +358,24 @@ export class DownloadManager {
         phaseText = `${versionId} 版本安装完成！`;
       }
 
-      this.state.phase = phase;
-      this.state.currentStepText = phaseText;
-      this.state.speedMBs = activeIndex >= files.length ? 0 : Number(actualSpeedMBs.toFixed(1));
+      currentTask.phase = phase;
+      currentTask.currentStepText = phaseText;
+      currentTask.speedMBs = activeIndex >= files.length ? 0 : Number(actualSpeedMBs.toFixed(1));
 
       if (activeIndex >= files.length) {
-        this.throttlePool.flush();
-        if (this.simulationInterval) {
-          clearInterval(this.simulationInterval);
-          this.simulationInterval = null;
-        }
-        this.isSimulating = false;
-        this.state.status = 'completed';
-        this.state.progressPercent = 100;
-        this.state.speedMBs = 0;
+        pool.flush();
+        clearInterval(interval);
+        this.simulationIntervals.delete(versionId);
+        this.isSimulatingMap.set(versionId, false);
+        currentTask.status = 'completed';
+        currentTask.progressPercent = 100;
+        currentTask.speedMBs = 0;
         this.notify();
         onFinish?.(true);
       }
     }, 150);
+
+    this.simulationIntervals.set(versionId, interval);
 
     // Concurrently trigger real backend installation
     return executeFullVersionInstall(gameDir, versionId, versionUrl, (status) => {
@@ -355,43 +385,76 @@ export class DownloadManager {
     }, source);
   }
 
-  public pauseDownload(): void {
-    if (this.state.status === 'downloading') {
-      this.state.status = 'paused';
-      this.state.speedMBs = 0;
+  public pauseDownload(versionId?: string): void {
+    const targetId = versionId || this.activeVersionId;
+    if (targetId && this.tasks.has(targetId)) {
+      const task = this.tasks.get(targetId)!;
+      if (task.status === 'downloading') {
+        task.status = 'paused';
+        task.speedMBs = 0;
+        this.notify();
+      }
+    } else {
+      this.tasks.forEach((t) => {
+        if (t.status === 'downloading') {
+          t.status = 'paused';
+          t.speedMBs = 0;
+        }
+      });
       this.notify();
     }
   }
 
-  public resumeDownload(): void {
-    if (this.state.status === 'paused') {
-      this.state.status = 'downloading';
-      this.state.speedMBs = 0;
+  public resumeDownload(versionId?: string): void {
+    const targetId = versionId || this.activeVersionId;
+    if (targetId && this.tasks.has(targetId)) {
+      const task = this.tasks.get(targetId)!;
+      if (task.status === 'paused') {
+        task.status = 'downloading';
+        task.speedMBs = 0;
+        this.notify();
+      }
+    } else {
+      this.tasks.forEach((t) => {
+        if (t.status === 'paused') {
+          t.status = 'downloading';
+          t.speedMBs = 0;
+        }
+      });
       this.notify();
     }
   }
 
-  public cancelDownload(): void {
-    this.isSimulating = false;
-    if (this.simulationInterval) {
-      clearInterval(this.simulationInterval);
-      this.simulationInterval = null;
+  public cancelDownload(versionId?: string): void {
+    const targetId = versionId || this.activeVersionId;
+    if (targetId && this.tasks.has(targetId)) {
+      const interval = this.simulationIntervals.get(targetId);
+      if (interval) {
+        clearInterval(interval);
+        this.simulationIntervals.delete(targetId);
+      }
+      this.isSimulatingMap.set(targetId, false);
+      const pool = this.throttlePools.get(targetId);
+      if (pool) {
+        pool.clear();
+        this.throttlePools.delete(targetId);
+      }
+      this.tasks.delete(targetId);
+      if (this.activeVersionId === targetId) {
+        const remaining = Array.from(this.tasks.keys());
+        this.activeVersionId = remaining.length > 0 ? remaining[0] : '';
+      }
+      this.notify();
+    } else {
+      this.simulationIntervals.forEach((interval) => clearInterval(interval));
+      this.simulationIntervals.clear();
+      this.isSimulatingMap.clear();
+      this.throttlePools.forEach((pool) => pool.clear());
+      this.throttlePools.clear();
+      this.tasks.clear();
+      this.activeVersionId = '';
+      this.notify();
     }
-    this.throttlePool.clear();
-    this.state = {
-      versionId: '',
-      status: 'idle',
-      phase: 'idle',
-      currentStepText: '',
-      progressPercent: 0,
-      speedMBs: 0,
-      downloadedBytes: 0,
-      totalBytes: 0,
-      completedFiles: 0,
-      totalFiles: 0,
-      files: [],
-    };
-    this.notify();
   }
 }
 

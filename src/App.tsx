@@ -14,7 +14,7 @@ import { InitWizard } from "./components/InitWizard";
 import { VersionDownloadModal } from "./components/VersionDownloadModal";
 import { DownloadView } from "./components/DownloadView";
 import { DownloadDetailSidebar } from "./components/DownloadDetailSidebar";
-import { SteamDownloadBar } from "./components/SteamDownloadBar";
+import { DownloadStatusBar } from "./components/DownloadStatusBar";
 import { DownloadManagerWorkbench } from "./components/DownloadManagerWorkbench";
 import type { Account } from "./types/account";
 import { getActiveAccount, onAccountsChange } from "./utils/accountService";
@@ -53,6 +53,7 @@ function App() {
   const [selectedManifestVersion, setSelectedManifestVersion] = useState<ManifestVersionEntry | null>(null);
   const [downloadSource, setDownloadSource] = useState<DownloadSource>(loadLauncherSettings().downloadSource || 'bmclapi');
   const [downloadTask, setDownloadTask] = useState<DownloadTaskState>(downloadManager.getState());
+  const [downloadTasks, setDownloadTasks] = useState<DownloadTaskState[]>(downloadManager.getTasks());
   const [javaRuntimes, setJavaRuntimes] = useState<JavaRuntime[]>([]);
   const [activeAccount, setActiveAccount] = useState<Account | null>(null);
   const [isAccountModalOpen, setIsAccountModalOpen] = useState(false);
@@ -207,26 +208,29 @@ function App() {
   }, []);
 
   useEffect(() => {
-    const unsub = downloadManager.subscribe((st) => {
+    const unsub = downloadManager.subscribe((st, allTasks) => {
       setDownloadTask(st);
+      setDownloadTasks(allTasks);
     });
     return unsub;
   }, []);
 
-  const handleStartDownload = () => {
+  const handleStartDownload = (targetVersionId?: string, targetVersionUrl?: string) => {
     const s = loadLauncherSettings();
     const effectiveSource = downloadSource || s.downloadSource || 'bmclapi';
     const effectiveId =
-      currentTab === "download" && selectedManifestVersion
+      targetVersionId ||
+      (currentTab === "download" && selectedManifestVersion
         ? selectedManifestVersion.id
-        : selectedVersionId;
+        : selectedVersionId);
     const effectiveUrl =
-      currentTab === "download" && selectedManifestVersion
+      targetVersionUrl ||
+      (currentTab === "download" && selectedManifestVersion && selectedManifestVersion.id === effectiveId
         ? selectedManifestVersion.url
         : transformDownloadUrl(
             `https://piston-meta.mojang.com/v1/packages/${effectiveId}/${effectiveId}.json`,
             effectiveSource
-          );
+          ));
 
     downloadManager.startDownload(
       effectiveId,
@@ -619,10 +623,11 @@ function App() {
         >
           <DownloadManagerWorkbench
             task={downloadTask}
+            tasks={downloadTasks}
             onBack={() => setIsDownloadManagerOpen(false)}
-            onPause={() => downloadManager.pauseDownload()}
-            onResume={() => downloadManager.resumeDownload()}
-            onCancel={() => downloadManager.cancelDownload()}
+            onPause={(vId) => downloadManager.pauseDownload(vId)}
+            onResume={(vId) => downloadManager.resumeDownload(vId)}
+            onCancel={(vId) => downloadManager.cancelDownload(vId)}
           />
         </div>
       </div>
@@ -640,8 +645,10 @@ function App() {
         {/* 中间下载条 (order-2 视觉居中，JSX 顺序在前以满足测试契约) */}
         <div className="flex items-center justify-center flex-1 order-2 h-full">
           {!isDownloadManagerOpen && (
-            <SteamDownloadBar
+            <DownloadStatusBar
+              // <SteamDownloadBar
               task={downloadTask}
+              tasks={downloadTasks}
               onClick={() => {
                 setIsLogViewOpen(false);
                 setIsDownloadManagerOpen(true);
